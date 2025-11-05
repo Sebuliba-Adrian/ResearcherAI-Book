@@ -38,7 +38,14 @@ const sidebars: SidebarsConfig = {
         'backend',
         'frontend',
         'testing',
+      ],
+    },
+    {
+      type: 'category',
+      label: '🚀 Production Deployment',
+      items: [
         'deployment',
+        'kubernetes',
         'monitoring',
         'conclusion',
       ],
