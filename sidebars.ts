@@ -46,6 +46,15 @@ const sidebars: SidebarsConfig = {
       items: [
         'deployment',
         'kubernetes',
+        'terraform',
+      ],
+    },
+    {
+      type: 'category',
+      label: '📊 Operations & Monitoring',
+      items: [
+        'observability',
+        'cicd',
         'monitoring',
         'conclusion',
       ],
