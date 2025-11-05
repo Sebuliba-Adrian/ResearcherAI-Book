@@ -137,7 +137,7 @@ Technical reviewers and beta readers provided invaluable feedback that shaped th
 
 Connect:
 - GitHub: @Sebuliba-Adrian
-- Email: [your-email@example.com]
+- Email: sebuliba.adrian@gmail.com
 
 ---
 

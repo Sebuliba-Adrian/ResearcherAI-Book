@@ -1194,7 +1194,7 @@ output "next_steps" {
 
     2. Clone your repository:
        cd /opt/researcherai
-       git clone <your-repo-url> .
+       git clone https://github.com/Sebuliba-Adrian/ResearcherAI.git .
 
     3. Start the application:
        systemctl start researcherai
@@ -1257,7 +1257,7 @@ export DO_TOKEN="your-digitalocean-api-token-here"
 
 ```bash
 # Generate SSH key if you don't have one
-ssh-keygen -t rsa -b 4096 -C "your-email@example.com"
+ssh-keygen -t rsa -b 4096 -C "sebuliba.adrian@gmail.com"
 
 # Add to DigitalOcean
 doctl compute ssh-key import my-key --public-key-file ~/.ssh/id_rsa.pub
@@ -1406,7 +1406,7 @@ docker-compose ps
 cd /opt/researcherai
 
 # Clone your repository
-git clone https://github.com/your-username/ResearcherAI.git .
+git clone https://github.com/Sebuliba-Adrian/ResearcherAI.git .
 
 # Start services
 systemctl start researcherai

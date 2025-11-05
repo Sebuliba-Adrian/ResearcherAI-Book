@@ -657,7 +657,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/your-org/ResearcherAI.git
+    repoURL: https://github.com/Sebuliba-Adrian/ResearcherAI.git
     targetRevision: HEAD
     path: k8s/helm/researcherai
     helm:
@@ -942,7 +942,7 @@ helm upgrade researcherai-canary \
 
 View all workflow runs:
 ```
-https://github.com/your-org/ResearcherAI/actions
+https://github.com/Sebuliba-Adrian/ResearcherAI/actions
 ```
 
 ### Pipeline Metrics to Track
