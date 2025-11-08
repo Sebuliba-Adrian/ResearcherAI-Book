@@ -342,10 +342,586 @@ Scale beyond single-machine Docker Compose:
 - Paper writing assistance
 - Grant proposal suggestions
 - Experiment design help
+
+### 8.3.4 Multi-Modal RAG Systems
+
+One of the most exciting frontiers in RAG technology is multi-modal capabilities - the ability to understand and reason across text, images, tables, charts, and equations. ResearcherAI currently processes primarily text-based research papers, but research documents are inherently multi-modal.
+
+#### Why Multi-Modal RAG Matters for Research
+
+**Research papers contain diverse content types:**
+- **Figures and Charts**: Experimental results, statistical visualizations, diagrams
+- **Tables**: Numerical data, comparison matrices, experimental parameters
+- **Equations**: Mathematical formulations, algorithms, proofs
+- **Images**: Microscopy, medical scans, astronomical observations
+- **Diagrams**: System architectures, process flows, molecular structures
+
+**Current Limitation**: Text-only RAG misses critical information:
+```python
+# Current approach - text only
+paper_text = extract_text(pdf)
+index.add_documents([Document(text=paper_text)])
+
+# Problem: Loses all visual information
+# A chart showing 50% improvement is reduced to "Figure 1 shows results"
+```
+
+#### Multi-Modal RAG Architecture
+
+```mermaid
+graph TB
+    subgraph Input["Multi-Modal Document Processing"]
+        PDF[Research Paper PDF]
+        PDF --> TextExt[Text Extraction]
+        PDF --> ImgExt[Image Extraction]
+        PDF --> TableExt[Table Extraction]
+        PDF --> EqExt[Equation Extraction]
+    end
+
+    subgraph Encoding["Multi-Modal Encoding"]
+        TextExt --> TextEmbed[Text Embeddings<br/>all-MiniLM-L6-v2]
+        ImgExt --> ImgEmbed[Vision Embeddings<br/>CLIP/ViT]
+        TableExt --> TableEmbed[Table Embeddings<br/>TaPas/TableFormer]
+        EqExt --> EqEmbed[Math Embeddings<br/>MathBERT]
+    end
+
+    subgraph Storage["Unified Vector Storage"]
+        TextEmbed --> Qdrant[(Qdrant Vector DB<br/>Multi-Modal Collections)]
+        ImgEmbed --> Qdrant
+        TableEmbed --> Qdrant
+        EqEmbed --> Qdrant
+    end
+
+    subgraph Retrieval["Multi-Modal Retrieval"]
+        Query[User Query] --> QueryEmbed[Query Encoding]
+        QueryEmbed --> Search[Cross-Modal Search]
+        Qdrant --> Search
+        Search --> Results[Text + Images + Tables]
+    end
+
+    subgraph Generation["Multi-Modal Generation"]
+        Results --> VLM[Vision-Language Model<br/>GPT-4V/Gemini Vision]
+        VLM --> Answer[Comprehensive Answer<br/>with Visual References]
+    end
+
+    style PDF fill:#90EE90
+    style Qdrant fill:#DDA0DD
+    style VLM fill:#87CEEB
+    style Answer fill:#FFB6C1
+```
+
+#### Implementation Roadmap
+
+**Phase 1: Document Understanding (Weeks 1-4)**
+
+Extract multi-modal content from PDFs:
+
+```python
+from pdf2image import convert_from_path
+from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
+import pytesseract
+
+class MultiModalDocumentParser:
+    """Parse PDFs into text, images, tables, and equations"""
+
+    def __init__(self):
+        # Layout understanding model
+        self.layout_model = LayoutLMv3ForTokenClassification.from_pretrained(
+            "microsoft/layoutlmv3-base"
+        )
+
+        # Table extraction
+        self.table_detector = TableTransformer.from_pretrained(
+            "microsoft/table-transformer-detection"
+        )
+
+        # Equation detection
+        self.equation_detector = LatexOCR()
+
+    def parse_paper(self, pdf_path: str) -> MultiModalDocument:
+        """Extract all modalities from research paper"""
+
+        # Convert PDF pages to images
+        pages = convert_from_path(pdf_path, dpi=300)
+
+        components = {
+            'text': [],
+            'figures': [],
+            'tables': [],
+            'equations': []
+        }
+
+        for page_num, page_img in enumerate(pages):
+            # Detect layout elements
+            layout = self.layout_model.detect_layout(page_img)
+
+            # Extract text blocks
+            for text_block in layout.get_text_blocks():
+                components['text'].append({
+                    'content': pytesseract.image_to_string(text_block),
+                    'page': page_num,
+                    'bbox': text_block.bbox
+                })
+
+            # Extract figures
+            for figure in layout.get_figures():
+                components['figures'].append({
+                    'image': figure.crop(page_img),
+                    'caption': figure.get_caption(),
+                    'page': page_num,
+                    'bbox': figure.bbox
+                })
+
+            # Extract tables
+            tables = self.table_detector.detect(page_img)
+            for table in tables:
+                # OCR table to structured data
+                table_data = self._ocr_table(table.crop(page_img))
+                components['tables'].append({
+                    'data': table_data,
+                    'caption': table.get_caption(),
+                    'page': page_num
+                })
+
+            # Extract equations
+            for equation in layout.get_equations():
+                latex = self.equation_detector.convert(equation.crop(page_img))
+                components['equations'].append({
+                    'latex': latex,
+                    'page': page_num,
+                    'inline': equation.is_inline()
+                })
+
+        return MultiModalDocument(**components)
+```
+
+**Phase 2: Multi-Modal Embeddings (Weeks 5-8)**
+
+Create unified embedding space for all modalities:
+
+```python
+from transformers import CLIPProcessor, CLIPModel
+from sentence_transformers import SentenceTransformer
+
+class MultiModalEmbedder:
+    """Generate embeddings for different modalities"""
+
+    def __init__(self):
+        # Text embeddings
+        self.text_model = SentenceTransformer('all-MiniLM-L6-v2')
+
+        # Vision embeddings (CLIP)
+        self.vision_model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14")
+        self.vision_processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+
+        # Table embeddings
+        self.table_model = SentenceTransformer('all-mpnet-base-v2')
+
+        # Math embeddings
+        self.math_model = SentenceTransformer('OrdalieTech/Solon-embeddings-large-0.1')
+
+    def embed_text(self, text: str) -> np.ndarray:
+        """Text to 384-dim vector"""
+        return self.text_model.encode(text)
+
+    def embed_image(self, image: PIL.Image, caption: str = "") -> np.ndarray:
+        """Image + caption to 768-dim vector"""
+        # Combine visual and text features
+        inputs = self.vision_processor(
+            text=[caption] if caption else [""],
+            images=image,
+            return_tensors="pt",
+            padding=True
+        )
+
+        with torch.no_grad():
+            outputs = self.vision_model(**inputs)
+            # Use combined vision-text embedding
+            embedding = outputs.image_embeds[0].numpy()
+
+        return embedding
+
+    def embed_table(self, table_df: pd.DataFrame, caption: str = "") -> np.ndarray:
+        """Table to 768-dim vector"""
+        # Convert table to natural language
+        table_text = self._table_to_text(table_df)
+
+        # Combine with caption
+        full_text = f"{caption}\n\n{table_text}" if caption else table_text
+
+        return self.table_model.encode(full_text)
+
+    def embed_equation(self, latex: str, context: str = "") -> np.ndarray:
+        """LaTeX equation to 768-dim vector"""
+        # Combine equation with surrounding context
+        eq_text = f"Equation: {latex}\nContext: {context}"
+
+        return self.math_model.encode(eq_text)
+
+    def _table_to_text(self, df: pd.DataFrame) -> str:
+        """Convert table to natural language description"""
+        description = []
+
+        # Column headers
+        description.append(f"Table with columns: {', '.join(df.columns)}")
+
+        # Row descriptions
+        for idx, row in df.head(5).iterrows():
+            row_desc = ", ".join([f"{col}: {val}" for col, val in row.items()])
+            description.append(row_desc)
+
+        if len(df) > 5:
+            description.append(f"... and {len(df) - 5} more rows")
+
+        return "\n".join(description)
+```
+
+**Phase 3: Multi-Modal Indexing (Weeks 9-12)**
+
+Store and retrieve across modalities:
+
+```python
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
+
+class MultiModalRAG:
+    """Multi-modal RAG system with LlamaIndex and Qdrant"""
+
+    def __init__(self):
+        self.client = QdrantClient(url="http://localhost:6333")
+        self.embedder = MultiModalEmbedder()
+
+        # Create collections for each modality
+        self._setup_collections()
+
+    def _setup_collections(self):
+        """Create Qdrant collections for each modality"""
+
+        collections = {
+            'text': 384,      # Text embedding dimension
+            'images': 768,    # CLIP embedding dimension
+            'tables': 768,    # Table embedding dimension
+            'equations': 768  # Math embedding dimension
+        }
+
+        for name, dim in collections.items():
+            self.client.recreate_collection(
+                collection_name=f"research_papers_{name}",
+                vectors_config=VectorParams(size=dim, distance=Distance.COSINE)
+            )
+
+    def index_paper(self, paper: MultiModalDocument, paper_id: str):
+        """Index all modalities of a research paper"""
+
+        # Index text chunks
+        for i, text_chunk in enumerate(paper.text):
+            embedding = self.embedder.embed_text(text_chunk['content'])
+
+            self.client.upsert(
+                collection_name="research_papers_text",
+                points=[PointStruct(
+                    id=f"{paper_id}_text_{i}",
+                    vector=embedding.tolist(),
+                    payload={
+                        'paper_id': paper_id,
+                        'type': 'text',
+                        'content': text_chunk['content'],
+                        'page': text_chunk['page']
+                    }
+                )]
+            )
+
+        # Index figures
+        for i, figure in enumerate(paper.figures):
+            embedding = self.embedder.embed_image(
+                figure['image'],
+                caption=figure['caption']
+            )
+
+            self.client.upsert(
+                collection_name="research_papers_images",
+                points=[PointStruct(
+                    id=f"{paper_id}_img_{i}",
+                    vector=embedding.tolist(),
+                    payload={
+                        'paper_id': paper_id,
+                        'type': 'figure',
+                        'caption': figure['caption'],
+                        'page': figure['page'],
+                        'image_path': self._save_image(figure['image'], paper_id, i)
+                    }
+                )]
+            )
+
+        # Index tables
+        for i, table in enumerate(paper.tables):
+            embedding = self.embedder.embed_table(
+                table['data'],
+                caption=table['caption']
+            )
+
+            self.client.upsert(
+                collection_name="research_papers_tables",
+                points=[PointStruct(
+                    id=f"{paper_id}_table_{i}",
+                    vector=embedding.tolist(),
+                    payload={
+                        'paper_id': paper_id,
+                        'type': 'table',
+                        'caption': table['caption'],
+                        'data': table['data'].to_dict(),
+                        'page': table['page']
+                    }
+                )]
+            )
+
+        # Index equations
+        for i, equation in enumerate(paper.equations):
+            embedding = self.embedder.embed_equation(
+                equation['latex'],
+                context=self._get_equation_context(paper.text, equation['page'])
+            )
+
+            self.client.upsert(
+                collection_name="research_papers_equations",
+                points=[PointStruct(
+                    id=f"{paper_id}_eq_{i}",
+                    vector=embedding.tolist(),
+                    payload={
+                        'paper_id': paper_id,
+                        'type': 'equation',
+                        'latex': equation['latex'],
+                        'page': equation['page'],
+                        'inline': equation['inline']
+                    }
+                )]
+            )
+
+    def search_multimodal(
+        self,
+        query: str,
+        modalities: List[str] = ['text', 'images', 'tables', 'equations'],
+        top_k: int = 5
+    ) -> Dict[str, List[Dict]]:
+        """Search across all modalities"""
+
+        results = {}
+
+        for modality in modalities:
+            # Encode query for this modality
+            if modality == 'text':
+                query_vector = self.embedder.embed_text(query)
+            elif modality == 'images':
+                # Use CLIP text encoder for cross-modal search
+                query_vector = self._encode_text_for_vision(query)
+            elif modality == 'tables':
+                query_vector = self.embedder.embed_table(
+                    pd.DataFrame(),  # Empty df, using text only
+                    caption=query
+                )
+            elif modality == 'equations':
+                query_vector = self.embedder.embed_equation("", context=query)
+
+            # Search Qdrant
+            search_results = self.client.search(
+                collection_name=f"research_papers_{modality}",
+                query_vector=query_vector.tolist(),
+                limit=top_k
+            )
+
+            results[modality] = [
+                {
+                    'score': hit.score,
+                    'payload': hit.payload
+                }
+                for hit in search_results
+            ]
+
+        return results
+```
+
+**Phase 4: Vision-Language Model Integration (Weeks 13-16)**
+
+Use multi-modal LLMs for answer generation:
+
+```python
+from anthropic import Anthropic
+import base64
+
+class MultiModalAnswerGenerator:
+    """Generate answers using vision-language models"""
+
+    def __init__(self):
+        self.client = Anthropic()
+
+    def generate_answer(
+        self,
+        query: str,
+        text_context: List[str],
+        images: List[PIL.Image],
+        tables: List[pd.DataFrame],
+        equations: List[str]
+    ) -> str:
+        """Generate comprehensive answer from multi-modal context"""
+
+        # Prepare message content with mixed modalities
+        message_content = []
+
+        # Add text context
+        context_text = "\n\n".join([
+            f"Text Source {i+1}:\n{text}"
+            for i, text in enumerate(text_context)
+        ])
+
+        message_content.append({
+            "type": "text",
+            "text": f"Query: {query}\n\nText Context:\n{context_text}"
+        })
+
+        # Add images
+        for i, img in enumerate(images):
+            # Convert image to base64
+            img_base64 = self._image_to_base64(img)
+
+            message_content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": img_base64
+                }
+            })
+            message_content.append({
+                "type": "text",
+                "text": f"Figure {i+1} (relevant to query)"
+            })
+
+        # Add tables as formatted text
+        for i, table in enumerate(tables):
+            table_markdown = table.to_markdown()
+            message_content.append({
+                "type": "text",
+                "text": f"\n\nTable {i+1}:\n{table_markdown}"
+            })
+
+        # Add equations
+        if equations:
+            eq_text = "\n\nRelevant Equations:\n" + "\n".join([
+                f"{i+1}. ${eq}$" for i, eq in enumerate(equations)
+            ])
+            message_content.append({
+                "type": "text",
+                "text": eq_text
+            })
+
+        # Generate answer
+        response = self.client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=2048,
+            messages=[{
+                "role": "user",
+                "content": message_content
+            }],
+            system="You are a research assistant. Analyze the provided text, images, tables, and equations to answer the research question comprehensively. Reference specific figures, tables, and equations in your answer."
+        )
+
+        return response.content[0].text
+```
+
+#### Expected Benefits
+
+**1. Improved Answer Quality**
+- 40-60% more comprehensive answers (includes visual evidence)
+- Better understanding of experimental results
+- Accurate interpretation of data visualizations
+
+**2. Enhanced Retrieval Accuracy**
+- Find relevant figures even when text description is vague
+- Retrieve similar experimental setups via image comparison
+- Identify related mathematical formulations
+
+**3. Better User Experience**
+- Visual answers with referenced figures
+- Table data presented clearly
+- Mathematical equations displayed properly
+
+**4. Research Workflow Integration**
+- Export figures for presentations
+- Extract tables for meta-analysis
+- Compile equations for mathematical proofs
+
+#### Challenges and Mitigation
+
+**Challenge 1: Embedding Dimension Mismatch**
+- Different models produce different dimensions (384 vs 768)
+- **Solution**: Use projection layers to unify dimensions or separate collections
+
+**Challenge 2: Computational Cost**
+- Vision models are expensive (10-100x slower than text)
+- **Solution**:
+  - Pre-compute embeddings offline
+  - Use smaller vision models (ViT-small)
+  - GPU acceleration
+
+**Challenge 3: PDF Extraction Quality**
+- Complex layouts cause parsing errors
+- **Solution**:
+  - Multiple extraction methods (PyMuPDF, pdfplumber, Camelot)
+  - Human-in-the-loop validation
+  - Confidence scoring
+
+**Challenge 4: Cross-Modal Relevance**
+- Image might be relevant but text description isn't
+- **Solution**: Dual encoding (CLIP) for text-image alignment
+
+#### Technology Stack
+
+**Document Processing**:
+- LayoutLMv3 for layout understanding
+- Table Transformer for table detection
+- LaTeX-OCR for equation extraction
+- pdf2image + Tesseract for OCR
+
+**Embeddings**:
+- CLIP (openai/clip-vit-large-patch14) for images
+- SentenceTransformers for text
+- TaPas/TableFormer for tables
+- MathBERT for equations
+
+**Vector Database**:
+- Qdrant with multi-collection support
+- Separate collections per modality
+- Cross-modal search capabilities
+
+**Generation**:
+- GPT-4 Vision or Gemini Pro Vision
+- Support for image inputs
+- Long context windows (128k+ tokens)
+
+#### Success Metrics
+
+**Retrieval Performance**:
+- Multi-modal recall@5: Target 80%+ (vs 60% text-only)
+- Cross-modal search accuracy: Target 75%+
+- Figure relevance: Target 85%+
+
+**Answer Quality**:
+- Answers cite visual evidence: Target 70%+ of responses
+- User satisfaction: Target 4.5/5 (vs 4.0/5 text-only)
+- Answer comprehensiveness: 50% improvement
+
+**System Performance**:
+- Index time per paper: Target less than 60 seconds
+- Query latency: Target less than 5 seconds (including image processing)
+- Storage per paper: Target less than 50MB
+
+This multi-modal RAG enhancement would transform ResearcherAI from a text-focused system into a truly comprehensive research assistant capable of understanding and reasoning across all elements of scientific papers.
+
+### 8.3.5 Additional Research Opportunities
+
+**Continued enhancements:**
 - Data analysis recommendations
 - Collaboration matching
-
-### 8.3.4 Research Opportunities
 
 Several research questions emerged during development:
 
