@@ -68,28 +68,25 @@ If you've used React Router or state machines, LangGraph is similar but for back
 
 ### Architecture Overview
 
-```
-┌─────────────────────────────────────────────┐
-│         StateGraph (Workflow Definition)    │
-├─────────────────────────────────────────────┤
-│                                             │
-│  Node: data_collection                      │
-│    ↓                                        │
-│  Node: graph_processing                     │
-│    ↓                                        │
-│  Node: vector_processing                    │
-│    ↓                                        │
-│  Node: llamaindex_indexing                  │
-│    ↓                                        │
-│  Node: reasoning                            │
-│    ↓                                        │
-│  Node: self_reflection (conditional)        │
-│    ↓                                        │
-│  Node: critic_review                        │
-│    ↓                                        │
-│  END or correction (conditional)            │
-│                                             │
-└─────────────────────────────────────────────┘
+```mermaid
+graph TD
+    Start([Start]) --> DataCollection[Data Collection Node]
+    DataCollection --> GraphProcessing[Graph Processing Node]
+    GraphProcessing --> VectorProcessing[Vector Processing Node]
+    VectorProcessing --> LlamaIndexing[LlamaIndex Indexing Node]
+    LlamaIndexing --> Reasoning[Reasoning Node]
+    Reasoning --> SelfReflection[Self-Reflection Node]
+    SelfReflection --> CriticReview[Critic Review Node]
+    CriticReview --> Decision{Quality Check}
+    Decision -->|Score >= 0.75| End([End])
+    Decision -->|Score < 0.75| Correction[Correction Node]
+    Correction --> Reasoning
+
+    style Start fill:#90EE90
+    style End fill:#FFB6C1
+    style Decision fill:#FFD700
+    style Reasoning fill:#87CEEB
+    style LlamaIndexing fill:#DDA0DD
 ```
 
 ### Implementation Details
@@ -596,16 +593,26 @@ LlamaIndex is like a full-stack ORM for documents - similar to how Prisma abstra
 
 ### Architecture Overview
 
-```
-┌──────────────────────────────────────────────────┐
-│           LlamaIndex RAG Pipeline                │
-├──────────────────────────────────────────────────┤
-│                                                  │
-│  Documents → Chunking → Embeddings → Index      │
-│                                                  │
-│  Query → Retrieval → Ranking → Synthesis        │
-│                                                  │
-└──────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    subgraph Indexing Pipeline
+        Docs[Documents] --> Chunk[Chunking]
+        Chunk --> Embed[Embeddings]
+        Embed --> Index[(Vector Index)]
+    end
+
+    subgraph Query Pipeline
+        Query[User Query] --> Retrieve[Retrieval]
+        Index -.->|Search| Retrieve
+        Retrieve --> Rank[Ranking]
+        Rank --> Synthesize[Response Synthesis]
+        Synthesize --> Answer[Final Answer]
+    end
+
+    style Docs fill:#90EE90
+    style Index fill:#DDA0DD
+    style Answer fill:#FFB6C1
+    style Query fill:#87CEEB
 ```
 
 ### Implementation Details
@@ -1186,33 +1193,42 @@ def add_documents(self, new_papers: List[Dict]) -> Dict:
 
 ### Integration Architecture
 
-```
-┌────────────────────────────────────────────────┐
-│        LangGraph Workflow (Orchestration)      │
-├────────────────────────────────────────────────┤
-│                                                │
-│  data_collection_node                          │
-│         ↓                                      │
-│  llamaindex_indexing_node ←─┐                 │
-│         ↓                    │                 │
-│  reasoning_node ─────────────┘                 │
-│         ↓        (queries LlamaIndex)          │
-│  self_reflection_node                          │
-│         ↓                                      │
-│  END                                           │
-│                                                │
-└────────────────────────────────────────────────┘
-         ↕ (uses)
-┌────────────────────────────────────────────────┐
-│       LlamaIndex RAG (Document Intelligence)   │
-├────────────────────────────────────────────────┤
-│                                                │
-│  - Document indexing                           │
-│  - Vector storage (Qdrant)                     │
-│  - Semantic retrieval                          │
-│  - Response synthesis                          │
-│                                                │
-└────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph LangGraph[LangGraph Workflow - Orchestration Layer]
+        DC[data_collection_node]
+        LI[llamaindex_indexing_node]
+        RN[reasoning_node]
+        SR[self_reflection_node]
+        E([END])
+
+        DC --> LI
+        LI --> RN
+        RN --> SR
+        SR --> E
+    end
+
+    subgraph LlamaIndex[LlamaIndex RAG - Document Intelligence Layer]
+        DI[Document Indexing]
+        VS[(Vector Storage - Qdrant)]
+        Ret[Semantic Retrieval]
+        Syn[Response Synthesis]
+
+        DI --> VS
+        VS --> Ret
+        Ret --> Syn
+    end
+
+    LI -.->|Index Documents| DI
+    RN -.->|Query Context| Ret
+    Syn -.->|Return Results| RN
+
+    style LangGraph fill:#E6F3FF
+    style LlamaIndex fill:#FFF4E6
+    style DC fill:#90EE90
+    style RN fill:#87CEEB
+    style LI fill:#DDA0DD
+    style VS fill:#FFD700
 ```
 
 ### Complete Integration Example

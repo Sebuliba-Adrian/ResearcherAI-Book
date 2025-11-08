@@ -13,25 +13,38 @@ With requirements in hand, it was time to design the system. This chapter walks 
 
 Here's the 30,000-foot view of ResearcherAI:
 
-```
-User Query
-    ↓
-OrchestratorAgent (Coordinator)
-    ↓
-┌───┴───┬────────┬──────────┬──────────┐
-│       │        │          │          │
-Data    Graph    Vector  Reasoning  Scheduler
-Collect Agent    Agent     Agent      Agent
-Agent
-│       │        │          │          │
-└───┬───┴────────┴──────────┴──────────┘
-    ↓
-Kafka Event Bus (Optional)
-    ↓
-┌───┴──────────────────┐
-│                      │
-Graph DB          Vector DB
-Neo4j/NetworkX    Qdrant/FAISS
+```mermaid
+graph TB
+    User[User Query] --> Orchestrator[OrchestratorAgent]
+
+    Orchestrator --> DataCollector[DataCollectorAgent]
+    Orchestrator --> GraphAgent[KnowledgeGraphAgent]
+    Orchestrator --> VectorAgent[VectorAgent]
+    Orchestrator --> ReasoningAgent[ReasoningAgent]
+    Orchestrator --> Scheduler[SchedulerAgent]
+
+    DataCollector --> Kafka{Kafka Event Bus<br/>Optional}
+    GraphAgent --> Kafka
+    VectorAgent --> Kafka
+    ReasoningAgent --> Kafka
+    Scheduler --> Kafka
+
+    Kafka --> GraphDB[(Graph DB<br/>Neo4j/NetworkX)]
+    Kafka --> VectorDB[(Vector DB<br/>Qdrant/FAISS)]
+
+    GraphAgent -.-> GraphDB
+    VectorAgent -.-> VectorDB
+
+    style User fill:#90EE90
+    style Orchestrator fill:#87CEEB
+    style Kafka fill:#FFD700
+    style GraphDB fill:#DDA0DD
+    style VectorDB fill:#DDA0DD
+    style DataCollector fill:#FFB6C1
+    style GraphAgent fill:#FFB6C1
+    style VectorAgent fill:#FFB6C1
+    style ReasoningAgent fill:#FFB6C1
+    style Scheduler fill:#FFB6C1
 ```
 
 Simple, right? Let me break down each component and explain the design decisions.
@@ -264,30 +277,37 @@ LlamaIndex is like an ORM for documents - similar to how Prisma abstracts databa
 
 The two frameworks work together seamlessly:
 
-```
-┌────────────────────────────────────────┐
-│   LangGraph Workflow (Orchestration)   │
-├────────────────────────────────────────┤
-│                                        │
-│  Node: data_collection                 │
-│    ↓                                   │
-│  Node: llamaindex_indexing ←──┐       │
-│    ↓                           │       │
-│  Node: reasoning ──────────────┘       │
-│         (queries LlamaIndex)           │
-│                                        │
-└────────────────────────────────────────┘
-         ↕ (uses)
-┌────────────────────────────────────────┐
-│   LlamaIndex RAG (Document Layer)      │
-├────────────────────────────────────────┤
-│                                        │
-│  - Document indexing                   │
-│  - Vector storage (Qdrant)             │
-│  - Semantic retrieval                  │
-│  - Response synthesis                  │
-│                                        │
-└────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph LG[LangGraph Workflow - Orchestration]
+        DC[data_collection_node]
+        LI[llamaindex_indexing_node]
+        RN[reasoning_node]
+
+        DC --> LI
+        LI --> RN
+    end
+
+    subgraph LL[LlamaIndex RAG - Document Layer]
+        DI[Document Indexing]
+        VS[Vector Storage - Qdrant]
+        SR[Semantic Retrieval]
+        RS[Response Synthesis]
+
+        DI --> VS
+        VS --> SR
+        SR --> RS
+    end
+
+    LI -.->|Index Docs| DI
+    RN -.->|Query| SR
+    RS -.->|Results| RN
+
+    style LG fill:#E6F3FF
+    style LL fill:#FFF4E6
+    style LI fill:#DDA0DD
+    style RN fill:#87CEEB
+    style VS fill:#FFD700
 ```
 
 **Division of Responsibilities**:
