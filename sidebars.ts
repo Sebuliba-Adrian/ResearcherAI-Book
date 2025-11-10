@@ -35,6 +35,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'planning',
         'architecture',
+        'agent-foundations',
         'frameworks',
         'backend',
         'frontend',
