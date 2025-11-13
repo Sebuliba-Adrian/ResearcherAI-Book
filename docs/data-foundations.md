@@ -912,16 +912,16 @@ Neither vector search nor knowledge graphs alone are sufficient:
 
 ```mermaid
 graph TB
-    Query[User Query:<br/>"Papers about transformers<br/>cited by BERT authors"]
+    Query["User Query: Papers about transformers cited by BERT authors"]
 
     Query --> Router{Query Type?}
 
-    Router -->|Semantic| Vector[Vector Search<br/>Find similar papers]
-    Router -->|Relational| Graph[Graph Query<br/>Find citations/authors]
+    Router -->|Semantic| Vector["Vector Search - Find similar papers"]
+    Router -->|Relational| Graph["Graph Query - Find citations/authors"]
     Router -->|Both| Hybrid[Hybrid Search]
 
-    Vector --> VectorDB[(Qdrant<br/>Embeddings)]
-    Graph --> GraphDB[(Neo4j<br/>Relationships)]
+    Vector --> VectorDB[("Qdrant - Embeddings")]
+    Graph --> GraphDB[("Neo4j - Relationships")]
     Hybrid --> VectorDB
     Hybrid --> GraphDB
 
@@ -930,7 +930,7 @@ graph TB
 
     Merge --> Rerank[Re-rank by Relevance]
     Rerank --> LLM[LLM Generation]
-    LLM --> Answer[Final Answer<br/>with Citations]
+    LLM --> Answer["Final Answer with Citations"]
 
     style Query fill:#90EE90
     style VectorDB fill:#DDA0DD
