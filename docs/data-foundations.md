@@ -888,6 +888,540 @@ LIMIT 10
 - **ResearcherAI**: Abstracts both behind unified interface!
 :::
 
+### Semantic Web: Ontologies, RDF, and SPARQL
+
+So far we've discussed **property graphs** (Neo4j, NetworkX). There's another powerful approach: **semantic web technologies** using **RDF** and **ontologies**.
+
+#### What Are Ontologies?
+
+Think of an ontology as a **formal schema for your knowledge**:
+
+**Web Developer Analogy**:
+```javascript
+// TypeScript interface = Ontology
+interface Person {
+  name: string;
+  worksFor: Organization;
+  knows: Person[];
+}
+
+interface Organization {
+  name: string;
+  foundedDate: Date;
+}
+```
+
+An **ontology** defines:
+- **Classes** (Person, Paper, Author, Concept)
+- **Properties** (name, authored, cites, discusses)
+- **Relationships** (Author → authored → Paper)
+- **Constraints** (a Paper must have at least one Author)
+
+#### RDF: Resource Description Framework
+
+RDF represents knowledge as **triples**:
+
+```
+Subject  Predicate  Object
+```
+
+Every statement is a triple (like a sentence):
+
+```turtle
+# Turtle syntax (RDF format)
+:paper1  rdf:type  :ResearchPaper .
+:paper1  :hasTitle  "Attention Is All You Need" .
+:paper1  :publishedYear  2017 .
+:paper1  :hasAuthor  :vaswani .
+:paper1  :cites  :paper2 .
+
+:vaswani  rdf:type  :Author .
+:vaswani  :hasName  "Ashish Vaswani" .
+```
+
+**Web Developer Analogy**:
+```javascript
+// JSON = Property Graph
+{
+  "id": "paper1",
+  "title": "Attention Is All You Need",
+  "year": 2017,
+  "authors": ["vaswani"]
+}
+
+// RDF Triples = Semantic Web
+["paper1", "type", "ResearchPaper"]
+["paper1", "hasTitle", "Attention Is All You Need"]
+["paper1", "publishedYear", 2017]
+["paper1", "hasAuthor", "vaswani"]
+```
+
+#### RDF Triple Visualization
+
+```mermaid
+graph LR
+    P1[":paper1"] -->|"rdf:type"| RP[":ResearchPaper"]
+    P1 -->|":hasTitle"| T["Attention Is All You Need"]
+    P1 -->|":publishedYear"| Y["2017"]
+    P1 -->|":hasAuthor"| A1[":vaswani"]
+    P1 -->|":cites"| P2[":paper2"]
+
+    A1 -->|"rdf:type"| AU[":Author"]
+    A1 -->|":hasName"| N["Ashish Vaswani"]
+
+    style P1 fill:#90EE90
+    style A1 fill:#FFB6C1
+    style RP fill:#DDA0DD
+    style AU fill:#DDA0DD
+```
+
+#### Development: RDFLib (Python)
+
+For development, use **RDFLib** - a pure Python library:
+
+```python
+from rdflib import Graph, Namespace, Literal, URIRef
+from rdflib.namespace import RDF, RDFS
+
+class RDFKnowledgeGraph:
+    """Development RDF knowledge graph using RDFLib"""
+
+    def __init__(self):
+        self.graph = Graph()
+
+        # Define custom namespace for our ontology
+        self.ns = Namespace("http://researcherai.org/ontology#")
+        self.graph.bind("research", self.ns)
+
+    def add_paper(
+        self,
+        paper_id: str,
+        title: str,
+        year: int,
+        abstract: str = ""
+    ):
+        """Add a research paper to the graph"""
+        paper_uri = URIRef(f"http://researcherai.org/papers/{paper_id}")
+
+        # Add triples
+        self.graph.add((paper_uri, RDF.type, self.ns.ResearchPaper))
+        self.graph.add((paper_uri, self.ns.hasTitle, Literal(title)))
+        self.graph.add((paper_uri, self.ns.publishedYear, Literal(year)))
+
+        if abstract:
+            self.graph.add((paper_uri, self.ns.hasAbstract, Literal(abstract)))
+
+    def add_author(self, author_id: str, name: str, affiliation: str = ""):
+        """Add an author to the graph"""
+        author_uri = URIRef(f"http://researcherai.org/authors/{author_id}")
+
+        self.graph.add((author_uri, RDF.type, self.ns.Author))
+        self.graph.add((author_uri, self.ns.hasName, Literal(name)))
+
+        if affiliation:
+            self.graph.add((author_uri, self.ns.affiliation, Literal(affiliation)))
+
+    def link_author_to_paper(self, author_id: str, paper_id: str):
+        """Create authorship relationship"""
+        author_uri = URIRef(f"http://researcherai.org/authors/{author_id}")
+        paper_uri = URIRef(f"http://researcherai.org/papers/{paper_id}")
+
+        self.graph.add((paper_uri, self.ns.hasAuthor, author_uri))
+        self.graph.add((author_uri, self.ns.authored, paper_uri))
+
+    def add_citation(self, citing_paper_id: str, cited_paper_id: str):
+        """Add citation relationship"""
+        citing_uri = URIRef(f"http://researcherai.org/papers/{citing_paper_id}")
+        cited_uri = URIRef(f"http://researcherai.org/papers/{cited_paper_id}")
+
+        self.graph.add((citing_uri, self.ns.cites, cited_uri))
+        self.graph.add((cited_uri, self.ns.citedBy, citing_uri))
+
+    def query_sparql(self, sparql_query: str):
+        """Execute SPARQL query"""
+        return self.graph.query(sparql_query)
+
+    def export_turtle(self, filename: str):
+        """Export graph to Turtle format"""
+        self.graph.serialize(destination=filename, format='turtle')
+
+    def load_turtle(self, filename: str):
+        """Load graph from Turtle format"""
+        self.graph.parse(filename, format='turtle')
+
+
+# Example usage
+rdf_kg = RDFKnowledgeGraph()
+
+# Add papers
+rdf_kg.add_paper(
+    "paper1",
+    "Attention Is All You Need",
+    2017,
+    "The dominant sequence transduction models..."
+)
+
+rdf_kg.add_paper(
+    "paper2",
+    "BERT: Pre-training of Deep Bidirectional Transformers",
+    2019,
+    "We introduce BERT..."
+)
+
+# Add authors
+rdf_kg.add_author("vaswani", "Ashish Vaswani", "Google Brain")
+rdf_kg.add_author("devlin", "Jacob Devlin", "Google AI")
+
+# Link relationships
+rdf_kg.link_author_to_paper("vaswani", "paper1")
+rdf_kg.link_author_to_paper("devlin", "paper2")
+rdf_kg.add_citation("paper2", "paper1")  # BERT cites Attention paper
+
+# Export to file
+rdf_kg.export_turtle("research_graph.ttl")
+```
+
+#### SPARQL: Query Language for RDF
+
+**SPARQL** is to RDF what **Cypher** is to Neo4j (or SQL to relational databases):
+
+```sparql
+# Find all papers by a specific author
+PREFIX research: <http://researcherai.org/ontology#>
+
+SELECT ?paper ?title ?year
+WHERE {
+    ?author research:hasName "Ashish Vaswani" .
+    ?author research:authored ?paper .
+    ?paper research:hasTitle ?title .
+    ?paper research:publishedYear ?year .
+}
+ORDER BY ?year
+```
+
+**Python Example**:
+
+```python
+sparql_query = """
+PREFIX research: <http://researcherai.org/ontology#>
+
+SELECT ?citing_title ?cited_title
+WHERE {
+    ?citing_paper research:cites ?cited_paper .
+    ?citing_paper research:hasTitle ?citing_title .
+    ?cited_paper research:hasTitle ?cited_title .
+}
+"""
+
+results = rdf_kg.query_sparql(sparql_query)
+for row in results:
+    print(f"{row.citing_title} cites {row.cited_title}")
+```
+
+#### More SPARQL Examples
+
+```sparql
+# Find authors who collaborated (co-authored papers)
+PREFIX research: <http://researcherai.org/ontology#>
+
+SELECT ?author1_name ?author2_name ?paper_title
+WHERE {
+    ?paper research:hasAuthor ?author1 .
+    ?paper research:hasAuthor ?author2 .
+    ?paper research:hasTitle ?paper_title .
+    ?author1 research:hasName ?author1_name .
+    ?author2 research:hasName ?author2_name .
+    FILTER(?author1 != ?author2)
+}
+
+# Find highly cited papers (cited by many others)
+SELECT ?title (COUNT(?citing) as ?citation_count)
+WHERE {
+    ?paper research:hasTitle ?title .
+    ?citing research:cites ?paper .
+}
+GROUP BY ?title
+HAVING (COUNT(?citing) > 100)
+ORDER BY DESC(?citation_count)
+
+# Find papers published after 2018 in a specific domain
+SELECT ?title ?year
+WHERE {
+    ?paper research:hasTitle ?title .
+    ?paper research:publishedYear ?year .
+    ?paper research:discusses ?concept .
+    ?concept research:hasName "transformers" .
+    FILTER(?year > 2018)
+}
+```
+
+#### Production: Apache Jena & SPARQL Endpoint
+
+For production, use **Apache Jena Fuseki** - a SPARQL server:
+
+```python
+from SPARQLWrapper import SPARQLWrapper, JSON
+import requests
+
+class JenaKnowledgeGraph:
+    """Production RDF knowledge graph using Apache Jena Fuseki"""
+
+    def __init__(
+        self,
+        endpoint_url: str = "http://localhost:3030/research",
+        update_endpoint: str = "http://localhost:3030/research/update"
+    ):
+        self.endpoint_url = endpoint_url
+        self.update_endpoint = update_endpoint
+        self.sparql = SPARQLWrapper(endpoint_url)
+
+    def add_triples(self, triples_turtle: str):
+        """Add RDF triples to the graph"""
+        # Use SPARQL UPDATE to insert data
+        update_query = f"""
+        PREFIX research: <http://researcherai.org/ontology#>
+
+        INSERT DATA {{
+            {triples_turtle}
+        }}
+        """
+
+        response = requests.post(
+            self.update_endpoint,
+            data={"update": update_query},
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        return response.status_code == 200
+
+    def add_paper(self, paper_id: str, title: str, year: int):
+        """Add a research paper"""
+        triples = f"""
+        @prefix research: <http://researcherai.org/ontology#> .
+        @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+        <http://researcherai.org/papers/{paper_id}>
+            rdf:type research:ResearchPaper ;
+            research:hasTitle "{title}" ;
+            research:publishedYear {year} .
+        """
+        return self.add_triples(triples)
+
+    def query(self, sparql_query: str) -> list:
+        """Execute SPARQL SELECT query"""
+        self.sparql.setQuery(sparql_query)
+        self.sparql.setReturnFormat(JSON)
+
+        results = self.sparql.query().convert()
+        return results["results"]["bindings"]
+
+    def find_papers_by_author(self, author_name: str) -> list:
+        """Find all papers by an author"""
+        query = f"""
+        PREFIX research: <http://researcherai.org/ontology#>
+
+        SELECT ?paper ?title ?year
+        WHERE {{
+            ?author research:hasName "{author_name}" .
+            ?author research:authored ?paper .
+            ?paper research:hasTitle ?title .
+            ?paper research:publishedYear ?year .
+        }}
+        ORDER BY DESC(?year)
+        """
+        return self.query(query)
+
+    def find_citation_chain(self, paper_id: str, depth: int = 2) -> list:
+        """Find papers that cite this paper (transitive)"""
+        query = f"""
+        PREFIX research: <http://researcherai.org/ontology#>
+
+        SELECT ?citing_paper ?title ?distance
+        WHERE {{
+            <http://researcherai.org/papers/{paper_id}>
+                ^research:cites{{1,{depth}}} ?citing_paper .
+            ?citing_paper research:hasTitle ?title .
+
+            BIND(
+                COUNT(?intermediate) as ?distance
+            )
+        }}
+        """
+        return self.query(query)
+
+
+# Example usage with Fuseki
+jena_kg = JenaKnowledgeGraph(
+    endpoint_url="http://localhost:3030/research/sparql",
+    update_endpoint="http://localhost:3030/research/update"
+)
+
+# Add paper
+jena_kg.add_paper(
+    "attention2017",
+    "Attention Is All You Need",
+    2017
+)
+
+# Query
+results = jena_kg.find_papers_by_author("Ashish Vaswani")
+for result in results:
+    print(f"{result['title']['value']} ({result['year']['value']})")
+```
+
+#### OWL: Web Ontology Language
+
+For formal ontologies, use **OWL** (Web Ontology Language):
+
+```turtle
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix research: <http://researcherai.org/ontology#> .
+
+# Define classes
+research:ResearchPaper rdf:type owl:Class .
+research:Author rdf:type owl:Class .
+research:Concept rdf:type owl:Class .
+
+# Define properties
+research:hasAuthor rdf:type owl:ObjectProperty ;
+    rdfs:domain research:ResearchPaper ;
+    rdfs:range research:Author .
+
+research:cites rdf:type owl:ObjectProperty ;
+    rdfs:domain research:ResearchPaper ;
+    rdfs:range research:ResearchPaper .
+
+research:hasTitle rdf:type owl:DatatypeProperty ;
+    rdfs:domain research:ResearchPaper ;
+    rdfs:range xsd:string .
+
+research:publishedYear rdf:type owl:DatatypeProperty ;
+    rdfs:domain research:ResearchPaper ;
+    rdfs:range xsd:integer .
+
+# Define constraints
+research:ResearchPaper rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty research:hasAuthor ;
+    owl:minCardinality "1"^^xsd:nonNegativeInteger
+] .  # A paper must have at least one author
+```
+
+#### RDF vs Property Graphs: When to Use Each
+
+| Feature | RDF (Jena/RDFLib) | Property Graphs (Neo4j) |
+|---------|-------------------|-------------------------|
+| **Data Model** | Triples (subject-predicate-object) | Nodes with properties + labeled edges |
+| **Schema** | Ontology (OWL) | Schema optional |
+| **Standards** | W3C standards (RDF, OWL, SPARQL) | No universal standard |
+| **Query Language** | SPARQL | Cypher |
+| **Reasoning** | Built-in inferencing (OWL reasoners) | No built-in reasoning |
+| **Flexibility** | Extremely flexible, schema evolution | More rigid structure |
+| **Performance** | Slower for graph traversal | Optimized for graph queries |
+| **Use Case** | Scientific data, linked data, ontologies | Social networks, recommendations |
+| **Learning Curve** | Steeper (ontologies, W3C specs) | Gentler (more intuitive) |
+
+**Web Developer Analogy**:
+- **RDF** = XML/JSON-LD with strict schemas (TypeScript with interfaces)
+- **Property Graphs** = NoSQL document store with relationships (MongoDB + relationships)
+
+#### When to Use RDF:
+
+1. **Need formal ontologies** - scientific domains, medical data
+2. **Data integration** - combining data from multiple sources
+3. **Reasoning/inference** - derive new facts from existing ones
+4. **Linked open data** - publish data others can link to
+5. **Interoperability** - strict W3C standards
+
+**Example**: Medical knowledge graphs, DBpedia, Wikidata
+
+#### When to Use Property Graphs:
+
+1. **Graph algorithms** - shortest path, community detection
+2. **High-performance traversal** - social networks, fraud detection
+3. **Flexible schema** - rapidly evolving data model
+4. **Intuitive queries** - easier to learn and use
+5. **Real-time recommendations** - e-commerce, content recommendations
+
+**Example**: LinkedIn connections, recommendation engines, ResearcherAI
+
+#### ResearcherAI's Approach
+
+For **ResearcherAI**, we use **property graphs (Neo4j)** because:
+
+1. **Better performance** for citation traversal
+2. **Simpler learning curve** for developers
+3. **Flexible schema** - research data models evolve
+4. **Cypher is intuitive** - easier than SPARQL for most queries
+5. **Neo4j has excellent tooling** - Browser, Bloom, Graph Data Science
+
+**However**, if you needed to:
+- Integrate with external ontologies (e.g., medical ontologies)
+- Publish linked open data
+- Use formal reasoning/inference
+- Comply with W3C standards
+
+Then **RDF with Apache Jena** would be the better choice.
+
+#### Hybrid Approach: RDF + Property Graphs
+
+You can actually use **both**:
+
+```python
+class HybridSemanticKnowledgeGraph:
+    """Combine RDF (for ontology) with Neo4j (for performance)"""
+
+    def __init__(
+        self,
+        neo4j_kg: Neo4jKnowledgeGraph,
+        rdf_kg: RDFKnowledgeGraph
+    ):
+        self.neo4j = neo4j_kg  # For fast queries
+        self.rdf = rdf_kg      # For ontology and reasoning
+
+    def add_paper(self, paper_data: dict):
+        """Add to both stores"""
+        # Add to Neo4j for performance
+        self.neo4j.add_paper(
+            paper_data["id"],
+            paper_data["title"],
+            paper_data["year"]
+        )
+
+        # Add to RDF for formal semantics
+        self.rdf.add_paper(
+            paper_data["id"],
+            paper_data["title"],
+            paper_data["year"]
+        )
+
+    def query_with_reasoning(self, sparql_query: str):
+        """Use RDF reasoner for inference"""
+        return self.rdf.query_sparql(sparql_query)
+
+    def query_with_performance(self, cypher_query: str):
+        """Use Neo4j for fast graph traversal"""
+        return self.neo4j.query_cypher(cypher_query)
+```
+
+#### RDF/SPARQL: Dev vs Prod Comparison
+
+| Feature | RDFLib (Dev) | Apache Jena Fuseki (Prod) |
+|---------|--------------|---------------------------|
+| **Storage** | In-memory or file | Persistent triple store |
+| **Query** | Python SPARQL | HTTP SPARQL endpoint |
+| **Scalability** | 100k triples | Billions of triples |
+| **Performance** | Slow for large graphs | Optimized indices |
+| **Reasoning** | Basic | Full OWL reasoning |
+| **Concurrent Access** | No | Yes (multi-user) |
+| **Best for** | Development, testing | Production, linked data |
+
+:::tip RDF vs Property Graphs Summary
+- **RDF**: Formal ontologies, reasoning, standards compliance, data integration
+- **Property Graphs**: Performance, graph algorithms, simpler queries, flexibility
+- **ResearcherAI**: Uses property graphs for performance, but you can use RDF if needed!
+:::
+
 ---
 
 ## Part 3: Hybrid RAG - Best of Both Worlds
