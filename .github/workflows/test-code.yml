@@ -13,6 +13,11 @@ on:
       - 'tests/**'
   workflow_dispatch:  # Allow manual trigger
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
   test-code-examples:
     runs-on: ubuntu-latest
