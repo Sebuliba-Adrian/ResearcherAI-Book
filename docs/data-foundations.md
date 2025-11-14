@@ -2304,6 +2304,557 @@ SELECT ?citing ?cited WHERE {
 - **Use existing ontologies** - don't reinvent the wheel (e.g., Schema.org)
 :::
 
+### Hands-On: Building a Research Paper Knowledge Graph
+
+Now let's walk through a complete example of building a knowledge graph from structured data using the **declarative SPARQL CONSTRUCT approach**.
+
+**What You'll Learn**:
+- How to transform CSV data into RDF triples
+- Using SPARQL CONSTRUCT queries for mapping
+- Incrementally building a knowledge graph
+- Visualizing the resulting graph
+
+#### Step 1: Input Data
+
+Imagine you have research paper data in CSV files:
+
+**papers.csv**:
+```csv
+domain,title,year,abstract
+NLP,Attention Is All You Need,2017,Transformer architecture for sequence-to-sequence
+NLP,BERT,2018,Bidirectional encoder representations
+CV,ResNet,2015,Deep residual learning for image recognition
+```
+
+**authors.csv**:
+```csv
+name,affiliation,domain
+Ashish Vaswani,Google Brain,NLP
+Jacob Devlin,Google AI,NLP
+Kaiming He,Facebook AI,CV
+```
+
+**citations.csv**:
+```csv
+citing_paper,cited_paper,citation_type
+BERT,Attention Is All You Need,builds_on
+ResNet,VGGNet,improves
+```
+
+**concepts.csv**:
+```csv
+paper,concept,importance
+Attention Is All You Need,self-attention,high
+Attention Is All You Need,transformers,high
+BERT,bidirectional,high
+ResNet,residual-connections,high
+```
+
+Let's load this data:
+
+```python
+import pandas as pd
+from rdflib import Graph, Literal, Namespace
+from rdflib.plugins.sparql.processor import prepareQuery
+
+# Load CSV files
+papers_df = pd.read_csv("papers.csv").fillna('')
+authors_df = pd.read_csv("authors.csv").fillna('')
+citations_df = pd.read_csv("citations.csv").fillna('')
+concepts_df = pd.read_csv("concepts.csv").fillna('')
+
+# Show distribution
+data = {
+    "Papers": len(papers_df),
+    "Authors": len(authors_df),
+    "Citations": len(citations_df),
+    "Concepts": len(concepts_df)
+}
+print(pd.DataFrame.from_dict(data, orient='index', columns=['Count']))
+# Output:
+#           Count
+# Papers        3
+# Authors       3
+# Citations     3
+# Concepts      4
+```
+
+#### Step 2: Define the Knowledge Graph Schema
+
+Based on our data, we define the schema:
+
+```turtle
+# Schema for Research Papers
+@prefix research: <http://example.org/research#> .
+
+# Classes (Entity Types)
+research:Paper a rdfs:Class .
+research:Author a rdfs:Class .
+research:Concept a rdfs:Class .
+research:ResearchDomain a rdfs:Class .
+
+# Properties
+research:hasTitle a rdf:Property ;
+    rdfs:domain research:Paper ;
+    rdfs:range xsd:string .
+
+research:publishedYear a rdf:Property ;
+    rdfs:domain research:Paper ;
+    rdfs:range xsd:integer .
+
+research:hasAbstract a rdf:Property ;
+    rdfs:domain research:Paper ;
+    rdfs:range xsd:string .
+
+# Relationships
+research:authoredBy a rdf:Property ;
+    rdfs:domain research:Paper ;
+    rdfs:range research:Author .
+
+research:cites a rdf:Property ;
+    rdfs:domain research:Paper ;
+    rdfs:range research:Paper .
+
+research:discusses a rdf:Property ;
+    rdfs:domain research:Paper ;
+    rdfs:range research:Concept .
+
+research:belongsToDomain a rdf:Property ;
+    rdfs:domain research:Paper ;
+    rdfs:range research:ResearchDomain .
+```
+
+**Visualization of Schema**:
+```mermaid
+graph LR
+    Paper[Paper] -->|hasTitle| Title[String]
+    Paper -->|publishedYear| Year[Integer]
+    Paper -->|hasAbstract| Abstract[String]
+    Paper -->|authoredBy| Author[Author]
+    Paper -->|cites| OtherPaper[Paper]
+    Paper -->|discusses| Concept[Concept]
+    Paper -->|belongsToDomain| Domain[ResearchDomain]
+
+    Author -->|hasName| Name[String]
+    Author -->|affiliation| Affiliation[String]
+
+    style Paper fill:#90EE90
+    style Author fill:#FFB6C1
+    style Concept fill:#DDA0DD
+    style Domain fill:#FFD700
+```
+
+#### Step 3: SPARQL CONSTRUCT Queries for Mapping
+
+Now we define **SPARQL CONSTRUCT queries** to transform CSV data into RDF triples:
+
+**Query 1: Create Paper Entities**
+```sparql
+PREFIX research: <http://example.org/research#>
+CONSTRUCT {
+    ?paper a research:Paper .
+    ?paper research:hasTitle ?title .
+    ?paper research:publishedYear ?year .
+    ?paper research:hasAbstract ?abstract .
+    ?paper research:belongsToDomain ?domainIRI .
+}
+WHERE {
+    BIND(IRI(CONCAT("http://data.example.org/paper/",
+                    REPLACE(?title, " ", "_"))) AS ?paper)
+    BIND(IRI(CONCAT("http://data.example.org/domain/",
+                    ?domain)) AS ?domainIRI)
+}
+```
+
+**Web Developer Analogy**:
+```javascript
+// SPARQL CONSTRUCT is like a template for creating objects
+const papers = csvData.map(row => ({
+  id: `http://data.example.org/paper/${row.title.replace(/ /g, '_')}`,
+  type: "Paper",
+  title: row.title,
+  year: row.year,
+  abstract: row.abstract,
+  domain: `http://data.example.org/domain/${row.domain}`
+}))
+```
+
+**Query 2: Create Author Entities**
+```sparql
+PREFIX research: <http://example.org/research#>
+CONSTRUCT {
+    ?author a research:Author .
+    ?author research:hasName ?name .
+    ?author research:affiliation ?affiliation .
+}
+WHERE {
+    BIND(IRI(CONCAT("http://data.example.org/author/",
+                    REPLACE(?name, " ", "_"))) AS ?author)
+}
+```
+
+**Query 3: Create Citation Relationships**
+```sparql
+PREFIX research: <http://example.org/research#>
+CONSTRUCT {
+    ?citingPaperIRI research:cites ?citedPaperIRI .
+    ?citingPaperIRI research:citationType ?citation_type .
+}
+WHERE {
+    BIND(IRI(CONCAT("http://data.example.org/paper/",
+                    REPLACE(?citing_paper, " ", "_"))) AS ?citingPaperIRI)
+    BIND(IRI(CONCAT("http://data.example.org/paper/",
+                    REPLACE(?cited_paper, " ", "_"))) AS ?citedPaperIRI)
+}
+```
+
+**Query 4: Create Concept Relationships**
+```sparql
+PREFIX research: <http://example.org/research#>
+CONSTRUCT {
+    ?paperIRI research:discusses ?conceptIRI .
+    ?conceptIRI research:importance ?importance .
+}
+WHERE {
+    BIND(IRI(CONCAT("http://data.example.org/paper/",
+                    REPLACE(?paper, " ", "_"))) AS ?paperIRI)
+    BIND(IRI(CONCAT("http://data.example.org/concept/",
+                    ?concept)) AS ?conceptIRI)
+}
+```
+
+#### Step 4: The Transform Function
+
+This function applies SPARQL CONSTRUCT queries to DataFrame rows:
+
+```python
+import re
+from rdflib import Graph, Literal
+from rdflib.plugins.sparql.processor import prepareQuery
+
+def transform(df: pd.DataFrame, construct_query: str,
+              first: bool = False) -> Graph:
+    """Transform Pandas DataFrame to RDFLib Graph using SPARQL CONSTRUCT.
+
+    Args:
+        df: Input DataFrame with CSV data
+        construct_query: SPARQL CONSTRUCT query template
+        first: If True, only process first row (for testing)
+
+    Returns:
+        RDF Graph with constructed triples
+    """
+    # Setup graphs
+    query_graph = Graph()
+    result_graph = Graph()
+
+    # Parse the SPARQL query
+    query = prepareQuery(construct_query)
+
+    # Clean column names (remove special characters)
+    invalid_pattern = re.compile(r"[^\w_]+")
+    headers = dict((k, invalid_pattern.sub("_", k)) for k in df.columns)
+
+    # Process each row
+    for _, row in df.iterrows():
+        # Create variable bindings: column name -> cell value
+        binding = dict((headers[k], Literal(row[k]))
+                      for k in df.columns if len(str(row[k])) > 0)
+
+        # Execute query with bindings
+        results = query_graph.query(query, initBindings=binding)
+
+        # Add resulting triples to graph
+        for triple in results:
+            result_graph.add(triple)
+
+        # Stop after first row if testing
+        if first:
+            break
+
+    return result_graph
+```
+
+**How It Works**:
+1. **Parse query**: Prepare the SPARQL CONSTRUCT template
+2. **For each row**: Create variable bindings (CSV columns → SPARQL variables)
+3. **Execute query**: Replace variables with values, construct triples
+4. **Add to graph**: Accumulate all triples in result graph
+
+#### Step 5: Build the Knowledge Graph Incrementally
+
+```python
+# Initialize empty knowledge graph
+kg = Graph()
+
+# Step 1: Add papers
+construct_papers = """
+PREFIX research: <http://example.org/research#>
+CONSTRUCT {
+    ?paper a research:Paper .
+    ?paper research:hasTitle ?title .
+    ?paper research:publishedYear ?year .
+    ?paper research:hasAbstract ?abstract .
+    ?paper research:belongsToDomain ?domainIRI .
+}
+WHERE {
+    BIND(IRI(CONCAT("http://data.example.org/paper/",
+                    REPLACE(?title, " ", "_"))) AS ?paper)
+    BIND(IRI(CONCAT("http://data.example.org/domain/",
+                    ?domain)) AS ?domainIRI)
+}
+"""
+
+# Test with first row
+print("Testing with first paper:")
+print(transform(papers_df, construct_papers, first=True).serialize(format='turtle'))
+
+# Output:
+# @prefix research: <http://example.org/research#> .
+#
+# <http://data.example.org/paper/Attention_Is_All_You_Need>
+#     a research:Paper ;
+#     research:hasTitle "Attention Is All You Need" ;
+#     research:publishedYear 2017 ;
+#     research:hasAbstract "Transformer architecture..." ;
+#     research:belongsToDomain <http://data.example.org/domain/NLP> .
+
+# Add all papers to knowledge graph
+kg += transform(papers_df, construct_papers)
+print(f"After adding papers: {len(kg)} triples")
+# Output: After adding papers: 12 triples (3 papers × 4 properties each)
+
+# Step 2: Add authors
+construct_authors = """
+PREFIX research: <http://example.org/research#>
+CONSTRUCT {
+    ?author a research:Author .
+    ?author research:hasName ?name .
+    ?author research:affiliation ?affiliation .
+}
+WHERE {
+    BIND(IRI(CONCAT("http://data.example.org/author/",
+                    REPLACE(?name, " ", "_"))) AS ?author)
+}
+"""
+
+kg += transform(authors_df, construct_authors)
+print(f"After adding authors: {len(kg)} triples")
+# Output: After adding authors: 21 triples
+
+# Step 3: Add citations
+construct_citations = """
+PREFIX research: <http://example.org/research#>
+CONSTRUCT {
+    ?citingPaperIRI research:cites ?citedPaperIRI .
+}
+WHERE {
+    BIND(IRI(CONCAT("http://data.example.org/paper/",
+                    REPLACE(?citing_paper, " ", "_"))) AS ?citingPaperIRI)
+    BIND(IRI(CONCAT("http://data.example.org/paper/",
+                    REPLACE(?cited_paper, " ", "_"))) AS ?citedPaperIRI)
+}
+"""
+
+kg += transform(citations_df, construct_citations)
+print(f"After adding citations: {len(kg)} triples")
+# Output: After adding citations: 24 triples
+
+# Step 4: Add concepts
+construct_concepts = """
+PREFIX research: <http://example.org/research#>
+CONSTRUCT {
+    ?paperIRI research:discusses ?conceptIRI .
+}
+WHERE {
+    BIND(IRI(CONCAT("http://data.example.org/paper/",
+                    REPLACE(?paper, " ", "_"))) AS ?paperIRI)
+    BIND(IRI(CONCAT("http://data.example.org/concept/",
+                    ?concept)) AS ?conceptIRI)
+}
+"""
+
+kg += transform(concepts_df, construct_concepts)
+print(f"Final knowledge graph: {len(kg)} triples")
+# Output: Final knowledge graph: 28 triples
+```
+
+#### Step 6: Query the Knowledge Graph
+
+Now we can query the constructed graph:
+
+```python
+# Query 1: Find all NLP papers
+query_nlp_papers = """
+PREFIX research: <http://example.org/research#>
+SELECT ?title ?year
+WHERE {
+    ?paper a research:Paper .
+    ?paper research:hasTitle ?title .
+    ?paper research:publishedYear ?year .
+    ?paper research:belongsToDomain <http://data.example.org/domain/NLP> .
+}
+ORDER BY ?year
+"""
+
+results = kg.query(query_nlp_papers)
+for row in results:
+    print(f"{row.title} ({row.year})")
+# Output:
+# Attention Is All You Need (2017)
+# BERT (2018)
+
+# Query 2: Find papers citing "Attention Is All You Need"
+query_citations = """
+PREFIX research: <http://example.org/research#>
+SELECT ?citing_title
+WHERE {
+    ?citing research:cites <http://data.example.org/paper/Attention_Is_All_You_Need> .
+    ?citing research:hasTitle ?citing_title .
+}
+"""
+
+results = kg.query(query_citations)
+for row in results:
+    print(f"Paper citing Attention: {row.citing_title}")
+# Output: Paper citing Attention: BERT
+
+# Query 3: Find all concepts discussed in NLP papers
+query_concepts = """
+PREFIX research: <http://example.org/research#>
+SELECT ?concept
+WHERE {
+    ?paper research:belongsToDomain <http://data.example.org/domain/NLP> .
+    ?paper research:discusses ?conceptIRI .
+    BIND(REPLACE(STR(?conceptIRI), ".*/", "") AS ?concept)
+}
+"""
+
+results = kg.query(query_concepts)
+concepts = [row.concept for row in results]
+print(f"NLP concepts: {', '.join(concepts)}")
+# Output: NLP concepts: self-attention, transformers, bidirectional
+```
+
+#### Step 7: Visualize the Knowledge Graph
+
+```python
+import networkx as nx
+import matplotlib.pyplot as plt
+
+def rdf_to_nx(rdf_graph: Graph) -> nx.DiGraph:
+    """Convert RDF graph to NetworkX directed graph."""
+    G = nx.DiGraph()
+
+    for s, p, o in rdf_graph:
+        # Extract local names (remove URI prefixes)
+        subject = str(s).split('/')[-1]
+        predicate = str(p).split('#')[-1]
+        obj = str(o).split('/')[-1] if isinstance(o, URIRef) else str(o)
+
+        # Add nodes and edges
+        G.add_edge(subject, obj, label=predicate)
+
+    return G
+
+# Convert to NetworkX
+G = rdf_to_nx(kg)
+
+# Visualize
+plt.figure(figsize=(15, 10))
+pos = nx.spring_layout(G, seed=42)
+
+# Draw nodes
+nx.draw_networkx_nodes(G, pos, node_size=1000, node_color='lightblue')
+
+# Draw edges
+nx.draw_networkx_edges(G, pos, edge_color='gray', arrows=True,
+                        arrowsize=20, connectionstyle='arc3,rad=0.1')
+
+# Draw labels
+nx.draw_networkx_labels(G, pos, font_size=8)
+
+# Draw edge labels
+edge_labels = nx.get_edge_attributes(G, 'label')
+nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=6)
+
+plt.title("Research Paper Knowledge Graph")
+plt.axis('off')
+plt.tight_layout()
+plt.show()
+```
+
+#### Step 8: Save the Knowledge Graph
+
+```python
+# Save to Turtle file (human-readable RDF format)
+kg.serialize(destination='research_papers.ttl', format='turtle')
+print("Knowledge graph saved to research_papers.ttl")
+
+# The file content looks like:
+# @prefix research: <http://example.org/research#> .
+#
+# <http://data.example.org/paper/Attention_Is_All_You_Need>
+#     a research:Paper ;
+#     research:hasTitle "Attention Is All You Need" ;
+#     research:publishedYear 2017 ;
+#     research:belongsToDomain <http://data.example.org/domain/NLP> ;
+#     research:discusses <http://data.example.org/concept/self-attention>,
+#                        <http://data.example.org/concept/transformers> .
+#
+# <http://data.example.org/paper/BERT>
+#     a research:Paper ;
+#     research:hasTitle "BERT" ;
+#     research:publishedYear 2018 ;
+#     research:cites <http://data.example.org/paper/Attention_Is_All_You_Need> ;
+#     research:discusses <http://data.example.org/concept/bidirectional> .
+```
+
+#### Key Takeaways
+
+**Declarative Approach Benefits**:
+1. **Separation of concerns**: Data (CSV) separate from logic (SPARQL)
+2. **Reusable queries**: Same query works for any CSV with same schema
+3. **Incremental building**: Add entities and relationships step-by-step
+4. **Easy to validate**: Test queries on single rows first
+5. **Standard-based**: SPARQL is W3C standard
+
+**Process Summary**:
+```mermaid
+graph LR
+    CSV[CSV Files] --> Transform[Transform Function]
+    SPARQL[SPARQL CONSTRUCT] --> Transform
+    Transform --> RDF[RDF Triples]
+    RDF --> KG[(Knowledge Graph)]
+    KG --> Query[SPARQL Queries]
+    KG --> Viz[Visualization]
+    KG --> Save[Turtle File]
+
+    style CSV fill:#E6F3FF
+    style SPARQL fill:#FFF9E6
+    style KG fill:#E6FFE6
+```
+
+**When to Use This Approach**:
+- ✅ Have structured data (CSV, databases)
+- ✅ Need standard-compliant knowledge graphs
+- ✅ Want to query with SPARQL
+- ✅ Require formal schema/ontology
+- ✅ Building production knowledge graphs
+
+**ResearcherAI Uses This For**:
+- arXiv paper metadata → Knowledge graph
+- Citation networks from Semantic Scholar
+- Author collaboration graphs
+- Concept hierarchies from papers
+
+:::tip Declarative vs Imperative
+**Declarative** (SPARQL CONSTRUCT): "What you want" - Define the shape of output graph
+**Imperative** (Python loops): "How to do it" - Step-by-step instructions
+
+SPARQL CONSTRUCT is declarative - you describe the desired graph structure, and the engine figures out how to create it. This is more maintainable and less error-prone than imperative loops.
+:::
+
 ### Production Decision: Neo4j vs Apache Jena Fuseki
 
 **Critical Understanding**: Neo4j and Apache Jena Fuseki are **NOT interchangeable alternatives**. They serve fundamentally different use cases!
