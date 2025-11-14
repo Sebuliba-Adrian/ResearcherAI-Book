@@ -1268,19 +1268,64 @@ for result in results:
     print(f"{result['title']['value']} ({result['year']['value']})")
 ```
 
-#### OWL: Web Ontology Language
+#### OWL: Web Ontology Language - The Power of Reasoning
 
-For formal ontologies, use **OWL** (Web Ontology Language):
+**OWL** (Web Ontology Language) extends RDF with **reasoning capabilities**. It's the difference between storing facts and **deriving new knowledge** from those facts.
+
+**Web Developer Analogy**:
+```javascript
+// RDF = Data storage
+const data = {
+  "Vaswani": { type: "Author", authored: ["paper1"] }
+}
+
+// OWL = Data storage + Logic rules
+const data = { ... }
+const rules = {
+  // If someone authored a paper, they are a researcher
+  "Author who authored something → Researcher"
+}
+// Reasoner can INFER: "Vaswani is a Researcher" (even if not explicitly stated)
+```
+
+#### Why OWL Matters: Automatic Inference
+
+**Without OWL** (just RDF):
+```turtle
+:vaswani :authored :paper1 .
+# To know Vaswani is a researcher, you must explicitly state it
+```
+
+**With OWL** (RDF + reasoning):
+```turtle
+# Define rule: anyone who authored something is a researcher
+:authored rdfs:domain :Researcher .
+
+# Just state the fact
+:vaswani :authored :paper1 .
+
+# OWL reasoner AUTOMATICALLY infers:
+:vaswani rdf:type :Researcher .  # Derived, not stated!
+```
+
+#### OWL Ontology Definition
 
 ```turtle
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix research: <http://researcherai.org/ontology#> .
 
 # Define classes
 research:ResearchPaper rdf:type owl:Class .
 research:Author rdf:type owl:Class .
+research:Researcher rdf:type owl:Class .
 research:Concept rdf:type owl:Class .
+research:InfluentialPaper rdf:type owl:Class .
+
+# Define class hierarchy
+research:Author rdfs:subClassOf research:Researcher .
+# All Authors are Researchers (but not all Researchers are Authors)
 
 # Define properties
 research:hasAuthor rdf:type owl:ObjectProperty ;
@@ -1291,11 +1336,18 @@ research:cites rdf:type owl:ObjectProperty ;
     rdfs:domain research:ResearchPaper ;
     rdfs:range research:ResearchPaper .
 
+research:citedBy rdf:type owl:ObjectProperty ;
+    owl:inverseOf research:cites .  # Automatic inverse!
+
 research:hasTitle rdf:type owl:DatatypeProperty ;
     rdfs:domain research:ResearchPaper ;
     rdfs:range xsd:string .
 
 research:publishedYear rdf:type owl:DatatypeProperty ;
+    rdfs:domain research:ResearchPaper ;
+    rdfs:range xsd:integer .
+
+research:citationCount rdf:type owl:DatatypeProperty ;
     rdfs:domain research:ResearchPaper ;
     rdfs:range xsd:integer .
 
@@ -1305,7 +1357,446 @@ research:ResearchPaper rdfs:subClassOf [
     owl:onProperty research:hasAuthor ;
     owl:minCardinality "1"^^xsd:nonNegativeInteger
 ] .  # A paper must have at least one author
+
+# Define derived class (automatic classification!)
+research:InfluentialPaper owl:equivalentClass [
+    rdf:type owl:Restriction ;
+    owl:onProperty research:citationCount ;
+    owl:someValuesFrom [
+        rdf:type rdfs:Datatype ;
+        owl:onDatatype xsd:integer ;
+        owl:withRestrictions ([ xsd:minInclusive 100 ])
+    ]
+] .  # Papers with 100+ citations are automatically "InfluentialPaper"
+
+# Property characteristics
+research:collaboratesWith rdf:type owl:SymmetricProperty .
+# If A collaborates with B, then B collaborates with A
+
+research:cites rdf:type owl:TransitiveProperty .
+# If A cites B, and B cites C, then A transitively cites C
 ```
+
+#### Development: Owlready2 with Reasoning
+
+For development, use **owlready2** - a Python library with built-in reasoner:
+
+```python
+from owlready2 import *
+import tempfile
+
+class OWLKnowledgeGraph:
+    """Development OWL ontology with reasoning"""
+
+    def __init__(self, ontology_iri="http://researcherai.org/ontology"):
+        self.onto = get_ontology(ontology_iri)
+
+        with self.onto:
+            # Define classes
+            class ResearchPaper(Thing):
+                pass
+
+            class Author(Thing):
+                pass
+
+            class Researcher(Thing):
+                pass
+
+            class Concept(Thing):
+                pass
+
+            class InfluentialPaper(ResearchPaper):
+                pass
+
+            # Define properties
+            class hasAuthor(ObjectProperty):
+                domain = [ResearchPaper]
+                range = [Author]
+
+            class authored(ObjectProperty):
+                domain = [Author]
+                range = [ResearchPaper]
+                inverse_property = hasAuthor
+
+            class cites(ObjectProperty, TransitiveProperty):
+                domain = [ResearchPaper]
+                range = [ResearchPaper]
+
+            class citedBy(ObjectProperty):
+                inverse_property = cites
+
+            class collaboratesWith(ObjectProperty, SymmetricProperty):
+                domain = [Author]
+                range = [Author]
+
+            class hasTitle(DataProperty, FunctionalProperty):
+                domain = [ResearchPaper]
+                range = [str]
+
+            class publishedYear(DataProperty, FunctionalProperty):
+                domain = [ResearchPaper]
+                range = [int]
+
+            class citationCount(DataProperty):
+                domain = [ResearchPaper]
+                range = [int]
+
+            # Define rules
+            class AuthorRule(Author >> Researcher):
+                """All authors are researchers"""
+                pass
+
+            # Define automatic classification
+            class InfluentialPaperRule(ResearchPaper):
+                equivalent_to = [
+                    ResearchPaper & citationCount.some(int >= 100)
+                ]
+
+        self.ResearchPaper = self.onto.ResearchPaper
+        self.Author = self.onto.Author
+        self.hasAuthor = self.onto.hasAuthor
+        self.cites = self.onto.cites
+        self.hasTitle = self.onto.hasTitle
+        self.publishedYear = self.onto.publishedYear
+        self.citationCount = self.onto.citationCount
+
+    def add_paper(self, paper_id: str, title: str, year: int, citations: int = 0):
+        """Add a research paper"""
+        paper = self.ResearchPaper(paper_id)
+        paper.hasTitle = [title]
+        paper.publishedYear = [year]
+        paper.citationCount = [citations]
+        return paper
+
+    def add_author(self, author_id: str, name: str):
+        """Add an author"""
+        author = self.Author(author_id)
+        author.label = [name]
+        return author
+
+    def link_author_to_paper(self, author, paper):
+        """Create authorship relationship"""
+        author.authored.append(paper)
+        # Inverse relationship is automatic!
+
+    def add_citation(self, citing_paper, cited_paper):
+        """Add citation relationship"""
+        citing_paper.cites.append(cited_paper)
+        # citedBy is automatic (inverse property)!
+
+    def run_reasoner(self):
+        """Run OWL reasoner to infer new facts"""
+        print("Running reasoner...")
+        with self.onto:
+            sync_reasoner(debug=False)
+        print("Reasoning complete!")
+
+    def find_influential_papers(self):
+        """Find papers automatically classified as influential"""
+        return list(self.onto.InfluentialPaper.instances())
+
+    def find_all_researchers(self):
+        """Find all researchers (including inferred ones)"""
+        return list(self.onto.Researcher.instances())
+
+    def save(self, filename: str):
+        """Save ontology to file"""
+        self.onto.save(file=filename, format="rdfxml")
+
+    def load(self, filename: str):
+        """Load ontology from file"""
+        self.onto = get_ontology(filename).load()
+
+
+# Example usage with reasoning
+owl_kg = OWLKnowledgeGraph()
+
+# Add papers
+paper1 = owl_kg.add_paper("attention2017", "Attention Is All You Need", 2017, 15000)
+paper2 = owl_kg.add_paper("bert2019", "BERT", 2019, 8000)
+paper3 = owl_kg.add_paper("transformer_xl", "Transformer-XL", 2019, 500)
+
+# Add authors
+vaswani = owl_kg.add_author("vaswani", "Ashish Vaswani")
+devlin = owl_kg.add_author("devlin", "Jacob Devlin")
+
+# Link relationships
+owl_kg.link_author_to_paper(vaswani, paper1)
+owl_kg.link_author_to_paper(devlin, paper2)
+
+# Add citations
+owl_kg.add_citation(paper2, paper1)  # BERT cites Attention
+owl_kg.add_citation(paper3, paper1)  # Transformer-XL cites Attention
+
+print("Before reasoning:")
+print(f"Influential papers: {len(owl_kg.find_influential_papers())}")
+print(f"Researchers: {len(owl_kg.find_all_researchers())}")
+
+# Run reasoner
+owl_kg.run_reasoner()
+
+print("\nAfter reasoning:")
+# Papers with 100+ citations are automatically classified as InfluentialPaper
+influential = owl_kg.find_influential_papers()
+print(f"Influential papers: {[p.hasTitle[0] for p in influential]}")
+
+# Authors are automatically inferred to be Researchers
+researchers = owl_kg.find_all_researchers()
+print(f"Researchers: {[r.label[0] for r in researchers]}")
+
+# Check inverse properties
+print(f"\nVaswani authored: {[p.hasTitle[0] for p in vaswani.authored]}")
+print(f"Paper1 has authors: {[a.label[0] for a in paper1.hasAuthor]}")
+# Both work! Inverse is automatic.
+
+# Check citedBy (inverse of cites)
+print(f"\nPaper1 is cited by: {[p.hasTitle[0] for p in paper1.citedBy]}")
+# Automatic from cites relationship!
+```
+
+#### OWL Reasoning Examples
+
+**1. Class Hierarchy Inference**:
+```python
+# Define hierarchy
+with owl_kg.onto:
+    class Author(Thing):
+        pass
+
+    class PhDStudent(Author):
+        pass
+
+    class Professor(Author):
+        pass
+
+    # All Authors are Researchers
+    class AuthorIsResearcher(Author >> Researcher):
+        pass
+
+# Create instance
+phd_student = owl_kg.onto.PhDStudent("alice")
+
+# Before reasoning
+print(phd_student.is_a)  # [PhDStudent]
+
+# Run reasoner
+sync_reasoner()
+
+# After reasoning
+print(phd_student.is_a)  # [PhDStudent, Author, Researcher]
+# Automatically inferred Alice is an Author and Researcher!
+```
+
+**2. Property Propagation**:
+```python
+# Define transitive property
+class influences(ObjectProperty, TransitiveProperty):
+    pass
+
+# State facts
+paper_a = ResearchPaper("paper_a")
+paper_b = ResearchPaper("paper_b")
+paper_c = ResearchPaper("paper_c")
+
+paper_a.influences = [paper_b]  # A influences B
+paper_b.influences = [paper_c]  # B influences C
+
+# Run reasoner
+sync_reasoner()
+
+# Reasoner infers: A influences C (transitively)
+print(paper_c in paper_a.influences)  # True!
+```
+
+**3. Automatic Classification**:
+```python
+# Define rule: Papers with many authors are "Collaborative"
+with owl_kg.onto:
+    class CollaborativePaper(ResearchPaper):
+        equivalent_to = [
+            ResearchPaper & hasAuthor.min(5)  # 5+ authors
+        ]
+
+# Add paper with 6 authors
+paper = ResearchPaper("multi_author_paper")
+for i in range(6):
+    author = Author(f"author_{i}")
+    paper.hasAuthor.append(author)
+
+# Run reasoner
+sync_reasoner()
+
+# Paper is automatically classified as CollaborativePaper!
+print(CollaborativePaper in paper.is_a)  # True!
+```
+
+#### Production: Apache Jena with OWL Reasoner
+
+For production, use **Apache Jena** with built-in OWL reasoners:
+
+```python
+from rdflib import Graph, Namespace
+from rdflib.plugins.sparql import prepareQuery
+
+class JenaOWLKnowledgeGraph:
+    """Production OWL knowledge graph with Jena reasoner"""
+
+    def __init__(self, fuseki_url: str = "http://localhost:3030/research"):
+        self.fuseki_url = fuseki_url
+        self.graph = Graph()
+        self.ns = Namespace("http://researcherai.org/ontology#")
+
+        # Load ontology schema
+        self.load_ontology()
+
+    def load_ontology(self):
+        """Load OWL ontology definitions"""
+        ontology_ttl = """
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        @prefix research: <http://researcherai.org/ontology#> .
+
+        research:Author rdfs:subClassOf research:Researcher .
+        research:authored rdfs:domain research:Author .
+        research:cites rdf:type owl:TransitiveProperty .
+        research:citedBy owl:inverseOf research:cites .
+        """
+        self.graph.parse(data=ontology_ttl, format="turtle")
+
+    def query_with_reasoning(self, sparql_query: str):
+        """Execute SPARQL with reasoning enabled"""
+        # Jena Fuseki can enable reasoner via endpoint config
+        # Example: http://localhost:3030/research_reasoned/sparql
+        results = self.graph.query(sparql_query)
+        return list(results)
+
+
+# Configure Jena Fuseki with OWL reasoner
+fuseki_config = """
+<#service> rdf:type fuseki:Service ;
+    fuseki:name "research" ;
+    fuseki:serviceQuery "sparql" ;
+    fuseki:dataset <#dataset> .
+
+<#dataset> rdf:type ja:DatasetTxnMem ;
+    ja:defaultGraph <#model_inf> .
+
+<#model_inf> rdf:type ja:InfModel ;
+    ja:reasoner [
+        ja:reasonerURL <http://jena.hpl.hp.com/2003/OWLFBRuleReasoner>
+    ] ;
+    ja:baseModel <#model_base> .
+
+<#model_base> rdf:type ja:MemoryModel .
+"""
+```
+
+#### OWL Profiles: Which to Use?
+
+OWL has different **profiles** (subsets) for different use cases:
+
+| Profile | Complexity | Reasoning | Use Case |
+|---------|------------|-----------|----------|
+| **OWL Full** | Maximum expressivity | Undecidable | Research, experimental |
+| **OWL DL** | Description Logic | Complete & decidable | General purpose |
+| **OWL Lite** | Basic class hierarchy | Simple & fast | Simple taxonomies |
+| **OWL EL** | Existential quantification | Polynomial time | Large ontologies (medical) |
+| **OWL QL** | Query-oriented | Log-space | Database integration |
+| **OWL RL** | Rule-based | Polynomial time | Business rules |
+
+**For ResearcherAI**: Use **OWL DL** or **OWL RL** - balance of expressivity and performance.
+
+#### When to Use OWL vs Just RDF
+
+**Use OWL when you need**:
+
+1. **Automatic classification**
+   - Classify papers as "influential" based on citation count
+   - Identify "interdisciplinary" papers based on concept diversity
+
+2. **Inference from rules**
+   - Infer co-authors from paper authorship
+   - Derive expertise areas from publication history
+
+3. **Consistency checking**
+   - Ensure papers have at least one author
+   - Validate that publication years are reasonable
+
+4. **Property inheritance**
+   - Symmetric properties (collaboration)
+   - Transitive properties (influence, citation chains)
+   - Inverse properties (cites ↔ citedBy)
+
+**Use just RDF when**:
+
+1. **Simple data storage** - no complex reasoning needed
+2. **Performance critical** - reasoning is computationally expensive
+3. **Schema is stable** - don't need automatic classification
+4. **Explicit is better** - want to state all facts explicitly
+
+#### OWL Reasoning: Dev vs Prod Comparison
+
+| Feature | Owlready2 (Dev) | Apache Jena (Prod) |
+|---------|-----------------|-------------------|
+| **Language** | Python | Java (Python client) |
+| **Reasoners** | HermiT, Pellet | Jena, Pellet, HermiT |
+| **Performance** | Slower (Python) | Faster (Java) |
+| **Scalability** | Small ontologies | Large ontologies |
+| **Ease of Use** | Very easy (Pythonic) | More complex setup |
+| **Integration** | Great for scripts | Enterprise integration |
+| **Best for** | Development, prototyping | Production, large scale |
+
+**Example Use Case for ResearcherAI**:
+
+```python
+# Use OWL to automatically identify "rising stars" (researchers)
+# Rule: A rising star is someone who:
+# - Authored papers in the last 3 years
+# - Has papers cited > 50 times
+# - Collaborates with established researchers
+
+with owl_kg.onto:
+    class EstablishedResearcher(Researcher):
+        equivalent_to = [
+            Researcher & authored.some(
+                ResearchPaper & citationCount.some(int >= 500)
+            )
+        ]
+
+    class RisingStar(Researcher):
+        equivalent_to = [
+            Researcher &
+            authored.some(
+                ResearchPaper &
+                publishedYear.some(int >= 2021) &
+                citationCount.some(int >= 50)
+            ) &
+            collaboratesWith.some(EstablishedResearcher)
+        ]
+
+# Run reasoner
+sync_reasoner()
+
+# Automatically finds rising stars!
+rising_stars = list(owl_kg.onto.RisingStar.instances())
+print(f"Rising stars: {[r.label[0] for r in rising_stars]}")
+```
+
+:::tip OWL Summary
+- **OWL** = RDF + reasoning/inference capabilities
+- **Use for**: Automatic classification, rule-based inference, consistency checking
+- **Dev**: owlready2 (easy Python integration)
+- **Prod**: Apache Jena (performance, scalability)
+- **ResearcherAI**: Could use OWL for researcher classification, paper categorization
+:::
+
+:::warning OWL Performance
+OWL reasoning can be **computationally expensive**. For large knowledge graphs (millions of triples), reasoning can take minutes to hours. Consider:
+- Using simpler OWL profiles (EL, QL, RL)
+- Pre-computing inferences offline
+- Using incremental reasoning
+- Caching reasoner results
+:::
 
 #### RDF vs Property Graphs: When to Use Each
 
