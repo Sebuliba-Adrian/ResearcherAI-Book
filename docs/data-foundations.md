@@ -414,54 +414,54 @@ for doc, score in results:
 
 Before diving into the technical details, let's see knowledge graphs in action.
 
-**Try This**: Open Google and search for "SAP" (the enterprise software company).
+**Try This**: Open Google and search for "Tesla" (the electric vehicle company).
 
 What do you see? Besides the typical list of matching websites, you'll notice a comprehensive panel on the right side showing:
 
-- **Description**: "Multinational software corporation..."
-- **Founded**: 1972
-- **Headquarters**: Walldorf, Germany
-- **CEO**: Christian Klein
+- **Description**: "American electric vehicle and clean energy company..."
+- **Founded**: 2003
+- **Headquarters**: Austin, Texas
+- **CEO**: Elon Musk
 - **Stock price** and other properties
 
-Now click on **"Walldorf"** (the headquarters location). You'll see another panel with:
+Now click on **"Austin, Texas"** (the headquarters location). You'll see another panel with:
 
-- **Description**: "Town in Baden-Württemberg, Germany"
-- **Population**: ~15,000
-- **Region**: Karlsruhe
+- **Description**: "Capital city of Texas, United States"
+- **Population**: ~1 million
+- **County**: Travis County
 
 This is a **knowledge graph** in action! Google isn't just returning text - it's showing you:
-- **Entities** (SAP, Walldorf, Christian Klein)
+- **Entities** (Tesla, Austin, Elon Musk)
 - **Properties** (founded date, population)
-- **Relationships** (SAP → headquarters → Walldorf → region → Karlsruhe)
+- **Relationships** (Tesla → headquarters → Austin → county → Travis County)
 
 **Web Developer Analogy**:
 ```javascript
 // Traditional search result = List of text snippets
-const results = ["SAP is a company...", "SAP founded in 1972...", "SAP located..."]
+const results = ["Tesla is a company...", "Tesla founded in 2003...", "Tesla located..."]
 
 // Knowledge graph = Structured interconnected data
 const knowledgeGraph = {
-  "SAP": {
+  "Tesla": {
     type: "Company",
     properties: {
-      founded: 1972,
-      name: "SAP SE"
+      founded: 2003,
+      name: "Tesla, Inc."
     },
     relationships: {
-      headquarters: "Walldorf",
-      CEO: "Christian_Klein"
+      headquarters: "Austin",
+      CEO: "Elon_Musk"
     }
   },
-  "Walldorf": {
+  "Austin": {
     type: "City",
     properties: {
-      population: 15000,
-      country: "Germany"
+      population: 1000000,
+      state: "Texas"
     },
     relationships: {
-      region: "Karlsruhe",
-      companies: ["SAP"]
+      county: "Travis_County",
+      companies: ["Tesla", "Oracle", "Dell"]
     }
   }
 }
@@ -471,7 +471,7 @@ const knowledgeGraph = {
 
 A **knowledge graph** represents structured information as a graph where:
 
-- **Nodes** represent **entities** (SAP, Walldorf, Christian Klein)
+- **Nodes** represent **entities** (Tesla, Austin, Elon Musk)
 - **Edges** represent **relationships** between entities (headquarters, CEO, located_in)
 
 **Two Main Components**:
@@ -488,10 +488,10 @@ A **knowledge graph** represents structured information as a graph where:
 2. **Instance Data**: The actual entities and relationships that follow the schema
    ```turtle
    # Instance data
-   SAP founded_year 1972
-   SAP name "SAP SE"
-   SAP headquarters Walldorf
-   SAP CEO Christian_Klein
+   Tesla founded_year 2003
+   Tesla name "Tesla, Inc."
+   Tesla headquarters Austin
+   Tesla CEO Elon_Musk
    ```
 
 ### Why Vector Search Isn't Enough
