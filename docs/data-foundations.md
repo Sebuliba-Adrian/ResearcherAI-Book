@@ -1913,6 +1913,327 @@ class HybridSemanticKnowledgeGraph:
 - **ResearcherAI**: Uses property graphs for performance, but you can use RDF if needed!
 :::
 
+### Production Decision: Neo4j vs Apache Jena Fuseki
+
+**Critical Understanding**: Neo4j and Apache Jena Fuseki are **NOT interchangeable alternatives**. They serve fundamentally different use cases!
+
+**The Key Question**: Which data model fits your use case?
+
+```mermaid
+graph TD
+    Start{What do you need?}
+
+    Start -->|Fast graph traversal<br/>recommendations, paths| PropGraph[Property Graph]
+    Start -->|Formal ontologies<br/>reasoning, inference| RDF[RDF Triple Store]
+    Start -->|Both capabilities| Hybrid[Hybrid Architecture]
+
+    PropGraph --> Dev1{Environment?}
+    Dev1 -->|Development| NetworkX[NetworkX]
+    Dev1 -->|Production| Neo4j[Neo4j + Cypher]
+
+    RDF --> Dev2{Environment?}
+    Dev2 -->|Development| RDFLib[RDFLib]
+    Dev2 -->|Production| Jena[Apache Jena Fuseki + SPARQL]
+
+    Hybrid --> Both[Neo4j + Jena<br/>Use both together]
+
+    style Neo4j fill:#90EE90
+    style Jena fill:#FFB6C1
+    style Both fill:#DDA0DD
+```
+
+#### When to Use Neo4j in Production
+
+**Use Neo4j when you need**:
+
+1. **High-Performance Graph Traversal**
+   ```cypher
+   // Find shortest path between papers (fast!)
+   MATCH path = shortestPath(
+     (a:Paper {id: "paper1"})-[:CITES*]-(b:Paper {id: "paper50"})
+   )
+   RETURN path
+   ```
+   - Neo4j is **optimized for this** (index-free adjacency)
+   - Jena/RDF is **much slower** for deep graph traversal
+
+2. **Graph Algorithms**
+   - PageRank, Louvain community detection
+   - Shortest paths, centrality measures
+   - Neo4j Graph Data Science library
+   - **RDF/Jena**: No built-in graph algorithms
+
+3. **Real-Time Recommendations**
+   - Friend recommendations (social networks)
+   - Paper recommendations based on citations
+   - Collaborative filtering
+   - **Performance critical** - Neo4j is faster
+
+4. **Intuitive Queries**
+   ```cypher
+   // Cypher is very readable
+   MATCH (p:Paper)-[:CITES]->(cited:Paper)
+   WHERE p.year > 2020
+   RETURN cited.title, count(*) as citations
+   ORDER BY citations DESC
+   ```
+   - Easier for developers to learn than SPARQL
+   - Better tooling (Neo4j Browser, Bloom)
+
+5. **Flexible Schema**
+   - Add new node labels and edge types dynamically
+   - Schema evolves with your application
+   - No formal ontology needed
+
+**Example**: ResearcherAI uses Neo4j for:
+- Citation network traversal
+- Finding related papers (graph algorithms)
+- Author collaboration networks
+- Fast query performance
+
+#### When to Use Apache Jena Fuseki in Production
+
+**Use Apache Jena Fuseki when you need**:
+
+1. **Formal Ontologies**
+   ```turtle
+   # Define strict schema
+   :ResearchPaper rdfs:subClassOf :Publication .
+   :ConferencePaper rdfs:subClassOf :ResearchPaper .
+   :JournalPaper rdfs:subClassOf :ResearchPaper .
+   ```
+   - W3C standard ontologies (OWL)
+   - Strict domain modeling
+   - **Neo4j**: No formal ontology support
+
+2. **Reasoning and Inference**
+   ```sparql
+   # Automatic inference: If A cites B and B cites C, find transitive citations
+   SELECT ?paper ?influenced
+   WHERE {
+     :paper1 :cites+ ?influenced .  # Transitive closure
+   }
+   ```
+   - OWL reasoners infer new facts
+   - Automatic classification
+   - **Neo4j**: No built-in reasoning
+
+3. **W3C Standards Compliance**
+   - Publishing Linked Open Data (LOD)
+   - Interoperability with DBpedia, Wikidata
+   - RDF, SPARQL, OWL standards
+   - **Neo4j**: Proprietary (Cypher is not W3C standard)
+
+4. **Data Integration**
+   - Merging data from multiple RDF sources
+   - Schema mapping and alignment
+   - Federated SPARQL queries across endpoints
+   - **Neo4j**: Harder to integrate with external sources
+
+5. **Scientific/Medical Domains**
+   - Existing domain ontologies (Gene Ontology, SNOMED CT)
+   - Formal knowledge representation
+   - Regulatory compliance requirements
+   - **Neo4j**: Not suitable for formal ontologies
+
+**Example**: Use Jena Fuseki for:
+- Medical knowledge graphs (SNOMED, ICD-10)
+- Scientific literature with formal taxonomies
+- Publishing linked open data
+- Integration with Wikidata/DBpedia
+
+#### Production Performance Comparison
+
+| Operation | Neo4j | Apache Jena Fuseki | Winner |
+|-----------|-------|-------------------|--------|
+| **Graph Traversal** (5 hops) | ~10ms | ~500ms+ | Neo4j (50x faster) |
+| **Complex Cypher/SPARQL** | Fast | Moderate | Neo4j |
+| **Write Throughput** | 10k-100k/sec | 1k-10k/sec | Neo4j |
+| **OWL Reasoning** | Not supported | Supported | Jena |
+| **Inference** | Manual (application) | Automatic (reasoner) | Jena |
+| **Standards Compliance** | Proprietary | W3C standards | Jena |
+| **Graph Algorithms** | Built-in (GDS) | Not supported | Neo4j |
+| **Storage Efficiency** | Good | Moderate (triples overhead) | Neo4j |
+
+#### When to Use BOTH (Hybrid Architecture)
+
+You can use **both together** for the best of both worlds:
+
+```python
+class HybridProductionKnowledgeGraph:
+    """Use Neo4j for performance, Jena for reasoning"""
+
+    def __init__(self):
+        # Neo4j for fast graph operations
+        self.neo4j = Neo4jKnowledgeGraph(
+            uri="bolt://neo4j-prod.example.com:7687"
+        )
+
+        # Jena for ontology and reasoning
+        self.jena = JenaKnowledgeGraph(
+            endpoint_url="http://fuseki-prod.example.com:3030/research/sparql"
+        )
+
+    def add_paper(self, paper_data: dict):
+        """Add to both databases"""
+        # Add to Neo4j for fast queries
+        self.neo4j.add_paper(
+            paper_data["id"],
+            paper_data["title"],
+            paper_data["year"]
+        )
+
+        # Add to Jena for reasoning
+        self.jena.add_paper(
+            paper_data["id"],
+            paper_data["title"],
+            paper_data["year"]
+        )
+
+    def find_related_papers(self, paper_id: str):
+        """Use Neo4j for fast graph traversal"""
+        return self.neo4j.find_related_papers(paper_id)
+
+    def classify_paper_topic(self, paper_id: str):
+        """Use Jena reasoner for automatic classification"""
+        sparql = f"""
+        PREFIX research: <http://researcherai.org/ontology#>
+
+        SELECT ?topic
+        WHERE {{
+            <http://researcherai.org/papers/{paper_id}>
+                research:hasInferredTopic ?topic .
+        }}
+        """
+        return self.jena.query(sparql)
+
+    def sync_databases(self):
+        """Periodically sync data between Neo4j and Jena"""
+        # Export from Neo4j, import to Jena
+        # Or vice versa
+        pass
+```
+
+**Use Hybrid When**:
+- Need **both** fast traversal AND formal reasoning
+- Want graph algorithms + automatic classification
+- Building enterprise knowledge graph with complex requirements
+- Have resources to maintain two databases
+
+**Trade-offs**:
+- ❌ More complex architecture
+- ❌ Data synchronization overhead
+- ❌ Higher infrastructure costs
+- ✅ Best of both worlds
+
+#### ResearcherAI's Production Choice: Neo4j
+
+**Why ResearcherAI uses Neo4j (not Jena) in production**:
+
+```python
+# ResearcherAI's production config
+PRODUCTION_CONFIG = {
+    "knowledge_graph": "Neo4j",  # Not Apache Jena
+    "reasoning": Why?
+}
+```
+
+**Reasons**:
+
+1. **Primary Use Case: Citation Network Traversal**
+   - Finding related papers by citation paths
+   - Author collaboration networks
+   - Paper recommendation based on graph structure
+   - **Neo4j excels at this**, Jena is slow
+
+2. **Performance Requirements**
+   - Real-time query responses (under 100ms)
+   - High read throughput (1000s queries/sec)
+   - **Neo4j is 10-50x faster** for graph queries
+
+3. **No Formal Ontology Needed**
+   - Research paper schema is relatively simple
+   - Don't need OWL reasoning
+   - Don't need automatic inference
+   - **Jena's strengths aren't needed**
+
+4. **Developer Experience**
+   - Cypher is easier to learn than SPARQL
+   - Better visualization tools (Neo4j Browser)
+   - Larger community and resources
+   - **Faster development**
+
+5. **Graph Algorithms**
+   - Use PageRank to find influential papers
+   - Community detection for research clusters
+   - Shortest paths for paper relationships
+   - **Neo4j Graph Data Science library**
+
+**When ResearcherAI WOULD use Jena instead**:
+
+If the requirements were:
+- ❌ Need formal research ontologies (ACM Computing Classification)
+- ❌ Must publish linked open data
+- ❌ Need automatic paper classification via reasoning
+- ❌ Integrate with existing RDF sources (DBpedia)
+- ❌ W3C standards compliance required
+
+**Then use Apache Jena Fuseki in production.**
+
+#### Quick Decision Guide
+
+**Choose Neo4j if**:
+- ✅ Primary use case: graph traversal, recommendations
+- ✅ Need high performance (real-time queries)
+- ✅ Want graph algorithms (PageRank, community detection)
+- ✅ Flexible schema, rapid development
+- ✅ Team familiar with SQL-like queries (Cypher)
+
+**Choose Apache Jena Fuseki if**:
+- ✅ Need formal ontologies (OWL)
+- ✅ Require reasoning and inference
+- ✅ Publishing linked open data
+- ✅ W3C standards compliance
+- ✅ Integrating with existing RDF sources
+
+**Choose Both (Hybrid) if**:
+- ✅ Need graph performance AND reasoning
+- ✅ Have resources for complex architecture
+- ✅ Enterprise requirements
+
+**For Most Projects**: Start with **Neo4j**. Only add Jena if you truly need formal ontologies or reasoning.
+
+#### Real-World Production Examples
+
+**Companies Using Neo4j**:
+- **LinkedIn** - Professional network graph
+- **eBay** - Product recommendations
+- **Airbnb** - Location-based search
+- **Walmart** - Supply chain optimization
+- **NASA** - Lessons learned database
+
+**Companies/Projects Using Apache Jena**:
+- **BBC** - Linked data for content
+- **Wikidata** - Knowledge base
+- **Getty Vocabularies** - Art metadata
+- **UK Government** - Open data publishing
+- **PubMed** - Biomedical ontologies
+
+**Notice the Pattern**:
+- **Neo4j**: Performance-critical, real-time applications
+- **Jena**: Formal knowledge, standards, publishing
+
+:::tip Production Database Selection
+- **Default choice for most projects**: **Neo4j** (performance, ease of use)
+- **Choose Jena if**: You need formal ontologies, reasoning, or standards compliance
+- **ResearcherAI uses Neo4j**: Because citation networks need fast traversal, not formal reasoning
+- **Start simple**: Begin with one database, add the other only if truly needed
+:::
+
+:::warning Don't Overkill
+Many projects **think** they need formal ontologies and reasoning, but actually just need a fast graph database. Start with Neo4j. Only add Jena if you have a clear use case for OWL reasoning or standards compliance.
+:::
+
 ---
 
 ## Part 3: Hybrid RAG - Best of Both Worlds
