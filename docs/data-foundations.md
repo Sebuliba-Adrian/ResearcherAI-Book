@@ -2471,7 +2471,266 @@ for query in queries:
 
 ## Part 4: GraphRAG - Knowledge Graph Enhanced RAG
 
-**GraphRAG** takes hybrid RAG further by using the knowledge graph to **enhance** the retrieval process.
+### What Exactly is GraphRAG?
+
+**GraphRAG** is NOT just "using a knowledge graph with RAG". It's a specific approach where the knowledge graph **actively enhances** the retrieval process by:
+
+1. **Expanding** initial search results with graph-connected context
+2. **Enriching** retrieved documents with relationship information
+3. **Providing** multi-hop reasoning paths through the graph
+
+**Web Developer Analogy**:
+```javascript
+// Traditional RAG = Direct database query
+const results = db.query("SELECT * FROM articles WHERE text MATCHES 'transformers'")
+return results  // Just the matching articles
+
+// GraphRAG = Query + JOIN on relationships
+const initial = db.query("SELECT * FROM articles WHERE text MATCHES 'transformers'")
+const expanded = initial.map(article => ({
+  ...article,
+  citations: db.query("SELECT * FROM articles WHERE id IN article.cited_papers"),
+  relatedConcepts: db.query("SELECT * FROM concepts WHERE article_id = article.id"),
+  authorExpertise: db.query("SELECT * FROM articles WHERE author_id = article.author_id")
+}))
+return expanded  // Original + graph-enriched context
+```
+
+### The Problem GraphRAG Solves
+
+**Scenario**: User asks "How do transformers handle long-range dependencies?"
+
+**Traditional RAG** (just vector search):
+```python
+# Returns: Top 3 papers about transformers
+results = [
+    "Attention is All You Need (Vaswani, 2017)",
+    "BERT (Devlin, 2018)",
+    "GPT-3 (Brown, 2020)"
+]
+# ❌ Missing: WHY transformers were invented (what came before)
+# ❌ Missing: HOW they evolved (what improved them)
+# ❌ Missing: WHAT problems remain (recent criticisms)
+```
+
+**GraphRAG** (vector search + graph expansion):
+```python
+# Returns: Top 3 papers + graph context
+results = {
+    "initial_papers": [
+        "Attention is All You Need (Vaswani, 2017)",
+        "BERT (Devlin, 2018)",
+        "GPT-3 (Brown, 2020)"
+    ],
+    "cited_papers": [  # WHAT CAME BEFORE (context)
+        "Neural Machine Translation by Jointly Learning to Align (Bahdanau, 2014)",
+        "Sequence to Sequence Learning (Sutskever, 2014)",
+        "Long Short-Term Memory (Hochreiter, 1997)"  # The problem transformers solved!
+    ],
+    "citing_papers": [  # WHAT CAME AFTER (evolution)
+        "Reformer: Efficient Transformer (Kitaev, 2020)",  # Addressed limitations
+        "Linformer (Wang, 2020)",  # Improved efficiency
+        "Performer (Choromanski, 2020)"  # Better for long sequences
+    ],
+    "related_concepts": [
+        "Self-attention", "Positional encoding", "Multi-head attention"
+    ]
+}
+# ✅ Has: Historical context (why transformers exist)
+# ✅ Has: Evolution (how they improved)
+# ✅ Has: Current solutions (what's happening now)
+```
+
+**Result**: LLM can now give a **complete historical narrative**, not just describe what transformers are!
+
+### Why Traditional RAG Isn't Enough
+
+**Problem 1: No Historical Context**
+
+```python
+# User question: "Why were transformers invented?"
+
+# Traditional RAG retrieves:
+papers = [
+    "Attention is All You Need (2017): Transformers use self-attention..."
+]
+# ❌ Doesn't explain what problem RNNs/LSTMs had
+# ❌ Doesn't show what transformers improved over
+
+# GraphRAG retrieves + expands via citations:
+papers = [
+    "Attention is All You Need (2017): Transformers use self-attention...",
+    "Cited papers": [
+        "LSTM (1997): LSTMs struggle with sequences >100 tokens",
+        "RNN vanishing gradients (1994): RNNs can't learn long dependencies"
+    ]
+]
+# ✅ Now LLM can explain: "RNNs had vanishing gradients, LSTMs helped but
+#    still struggled with long sequences, transformers solved this with self-attention"
+```
+
+**Problem 2: Missing Evolution**
+
+```python
+# User question: "How have transformers been improved since 2017?"
+
+# Traditional RAG:
+papers = ["Attention is All You Need (2017)"]  # The original paper
+# ❌ Doesn't show what came after
+
+# GraphRAG (with citing papers):
+papers = {
+    "initial": "Attention is All You Need (2017)",
+    "citing": [
+        "BERT (2018): Bidirectional pretraining",
+        "GPT-2 (2019): Larger scale",
+        "T5 (2019): Text-to-text framework",
+        "Reformer (2020): Efficient attention",
+        "Switch Transformers (2021): Sparse models"
+    ]
+}
+# ✅ Can now trace the evolution timeline
+```
+
+**Problem 3: No Multi-Hop Reasoning**
+
+```python
+# User question: "What recent work improves on BERT's limitations?"
+
+# Traditional RAG: Only finds papers mentioning "BERT limitations"
+# ❌ Might miss papers that solve the problem without mentioning BERT
+
+# GraphRAG:
+# 1. Find BERT paper
+# 2. Find papers citing BERT
+# 3. Filter for papers discussing "limitations" or "improvements"
+# 4. Find papers those papers cite (multi-hop)
+# ✅ Discovers solutions even if they don't directly mention BERT
+```
+
+### GraphRAG vs Traditional RAG vs Hybrid RAG
+
+| Approach | How It Works | Strengths | Weaknesses |
+|----------|-------------|-----------|------------|
+| **Traditional RAG** | Vector search → Top-K docs → LLM | Simple, fast | No context, no relationships |
+| **Hybrid RAG** | Vector search + Graph search → Merge → LLM | Combines semantic + relational | Still retrieves documents independently |
+| **GraphRAG** | Vector search → Graph expansion → Enhanced context → LLM | Rich context, multi-hop, relationships | More complex, slower |
+
+**Key Difference**:
+- **Hybrid RAG**: Uses graph for **direct queries** ("papers citing X")
+- **GraphRAG**: Uses graph to **expand** vector search results with connected context
+
+### When to Use GraphRAG
+
+**Use GraphRAG when**:
+
+1. **Historical Context Matters**
+   - Research paper Q&A (evolution of ideas)
+   - Patent analysis (prior art, citations)
+   - Scientific literature review
+
+2. **Relationships Are Important**
+   - "How did this idea evolve?"
+   - "What influenced this paper?"
+   - "What improved on this approach?"
+
+3. **Multi-Hop Reasoning Needed**
+   - "What recent work addresses limitations of X?"
+   - "Find papers in the intellectual lineage of X"
+
+4. **You Have a Knowledge Graph**
+   - Already built citation network
+   - Already have entity relationships
+   - Graph is well-structured
+
+**DON'T use GraphRAG when**:
+
+1. **Simple Keyword Matching** - Traditional search is fine
+2. **No Graph Available** - Building a graph is expensive
+3. **Real-Time Speed Critical** - Graph traversal adds latency
+4. **Documents Are Independent** - No meaningful relationships
+
+### GraphRAG: Two Approaches
+
+There are **two main approaches** to GraphRAG:
+
+#### Approach 1: Graph-Enhanced Retrieval (Shown Here)
+
+**How it works**:
+1. Use vector search to find initial relevant documents
+2. Use knowledge graph to **expand** those documents with connected context
+3. Feed enriched context to LLM
+
+**Pros**:
+- ✅ Simple to implement
+- ✅ Works with existing knowledge graphs (Neo4j, etc.)
+- ✅ Explainable (you can see the expansion)
+
+**Cons**:
+- ❌ Depends on quality of knowledge graph
+- ❌ Expansion can be noisy
+- ❌ Slower than pure vector search
+
+**Example**: ResearcherAI uses this approach
+
+#### Approach 2: Microsoft GraphRAG (Community Summaries)
+
+**How it works** (different from approach 1!):
+1. Build knowledge graph from documents
+2. Detect **communities** in the graph (clusters of related entities)
+3. Generate **LLM summaries** of each community
+4. At query time, search community summaries
+5. Retrieve relevant communities + their documents
+
+**Pros**:
+- ✅ Handles "global" questions ("What are the main themes?")
+- ✅ Summarizes large corpora
+- ✅ Finds patterns across documents
+
+**Cons**:
+- ❌ More complex (requires community detection + summarization)
+- ❌ Higher upfront cost (LLM summarization of all communities)
+- ❌ Less direct than traditional retrieval
+
+**Key Difference**:
+- **Approach 1** (Graph-Enhanced): Expands specific documents via graph
+- **Approach 2** (Microsoft GraphRAG): Summarizes graph communities
+
+**Which to use?**
+- **Specific questions** ("How do transformers work?") → Approach 1
+- **Global questions** ("What are the main AI trends?") → Approach 2
+- **ResearcherAI**: Uses Approach 1 (graph-enhanced retrieval)
+
+### GraphRAG Decision Tree
+
+```mermaid
+graph TD
+    Start{What type of questions?}
+
+    Start -->|Specific documents<br/>Direct answers| Specific[Specific Questions]
+    Start -->|Broad themes<br/>Summarization| Global[Global Questions]
+
+    Specific --> HasGraph{Have knowledge graph?}
+    Global --> MSGraphRAG[Microsoft GraphRAG<br/>Community summaries]
+
+    HasGraph -->|Yes| NeedContext{Need context?}
+    HasGraph -->|No| VectorOnly[Traditional RAG<br/>Vector search only]
+
+    NeedContext -->|Yes - relationships,<br/>citations, evolution| UseGraphRAG[GraphRAG Approach 1<br/>Graph-Enhanced Retrieval]
+    NeedContext -->|No - documents<br/>are independent| VectorOnly
+
+    UseGraphRAG --> Impl[Our implementation below]
+    VectorOnly --> Simple[Simple vector search]
+
+    style UseGraphRAG fill:#90EE90
+    style MSGraphRAG fill:#FFB6C1
+    style VectorOnly fill:#DDA0DD
+```
+
+**Quick Decision**:
+- **Have graph + need context** → GraphRAG (Approach 1)
+- **Need to summarize corpus** → Microsoft GraphRAG (Approach 2)
+- **Simple Q&A** → Traditional RAG
 
 ### GraphRAG vs Traditional RAG
 
