@@ -3076,7 +3076,7 @@ class HybridProductionKnowledgeGraph:
 # ResearcherAI's production config
 PRODUCTION_CONFIG = {
     "knowledge_graph": "Neo4j",  # Not Apache Jena
-    "reasoning": Why?
+    # Why Neo4j? See reasons below
 }
 ```
 
@@ -3500,13 +3500,13 @@ papers = [
 # ❌ Doesn't show what transformers improved over
 
 # GraphRAG retrieves + expands via citations:
-papers = [
-    "Attention is All You Need (2017): Transformers use self-attention...",
-    "Cited papers": [
+graph_context = {
+    "main_paper": "Attention is All You Need (2017): Transformers use self-attention...",
+    "cited_papers": [
         "LSTM (1997): LSTMs struggle with sequences >100 tokens",
         "RNN vanishing gradients (1994): RNNs can't learn long dependencies"
     ]
-]
+}
 # ✅ Now LLM can explain: "RNNs had vanishing gradients, LSTMs helped but
 #    still struggled with long sequences, transformers solved this with self-attention"
 ```
