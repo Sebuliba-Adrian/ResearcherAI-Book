@@ -410,6 +410,90 @@ for doc, score in results:
 
 ## Part 2: Knowledge Graphs and Structured Reasoning
 
+### Knowledge Graphs in the Real World
+
+Before diving into the technical details, let's see knowledge graphs in action.
+
+**Try This**: Open Google and search for "SAP" (the enterprise software company).
+
+What do you see? Besides the typical list of matching websites, you'll notice a comprehensive panel on the right side showing:
+
+- **Description**: "Multinational software corporation..."
+- **Founded**: 1972
+- **Headquarters**: Walldorf, Germany
+- **CEO**: Christian Klein
+- **Stock price** and other properties
+
+Now click on **"Walldorf"** (the headquarters location). You'll see another panel with:
+
+- **Description**: "Town in Baden-Württemberg, Germany"
+- **Population**: ~15,000
+- **Region**: Karlsruhe
+
+This is a **knowledge graph** in action! Google isn't just returning text - it's showing you:
+- **Entities** (SAP, Walldorf, Christian Klein)
+- **Properties** (founded date, population)
+- **Relationships** (SAP → headquarters → Walldorf → region → Karlsruhe)
+
+**Web Developer Analogy**:
+```javascript
+// Traditional search result = List of text snippets
+const results = ["SAP is a company...", "SAP founded in 1972...", "SAP located..."]
+
+// Knowledge graph = Structured interconnected data
+const knowledgeGraph = {
+  "SAP": {
+    type: "Company",
+    properties: {
+      founded: 1972,
+      name: "SAP SE"
+    },
+    relationships: {
+      headquarters: "Walldorf",
+      CEO: "Christian_Klein"
+    }
+  },
+  "Walldorf": {
+    type: "City",
+    properties: {
+      population: 15000,
+      country: "Germany"
+    },
+    relationships: {
+      region: "Karlsruhe",
+      companies: ["SAP"]
+    }
+  }
+}
+```
+
+### What Are Knowledge Graphs?
+
+A **knowledge graph** represents structured information as a graph where:
+
+- **Nodes** represent **entities** (SAP, Walldorf, Christian Klein)
+- **Edges** represent **relationships** between entities (headquarters, CEO, located_in)
+
+**Two Main Components**:
+
+1. **Schema/Ontology**: Defines the types of entities, their attributes, and allowed relationships
+   ```turtle
+   # Schema definition
+   Company has property: founded_year (integer)
+   Company has property: name (string)
+   Company has relationship: headquarters → City
+   Company has relationship: CEO → Person
+   ```
+
+2. **Instance Data**: The actual entities and relationships that follow the schema
+   ```turtle
+   # Instance data
+   SAP founded_year 1972
+   SAP name "SAP SE"
+   SAP headquarters Walldorf
+   SAP CEO Christian_Klein
+   ```
+
 ### Why Vector Search Isn't Enough
 
 Vector search excels at finding **similar content**, but fails at:
@@ -1913,6 +1997,313 @@ class HybridSemanticKnowledgeGraph:
 - **ResearcherAI**: Uses property graphs for performance, but you can use RDF if needed!
 :::
 
+### Building Knowledge Graphs: Construction Methods
+
+Now that you understand what knowledge graphs are, let's explore **how to build them** from various data sources.
+
+#### Three Main Approaches
+
+There are three primary methods to construct knowledge graphs, depending on your data source structure:
+
+**1. Structured Sources (Relational Databases, CSV)**
+
+**Characteristics**:
+- Fixed schema (all entities of same type have same attributes)
+- Examples: SQL databases, CSV files, Excel spreadsheets
+- **Easiest to convert** to knowledge graphs
+
+**Method**: Use **mapping rules** (like R2RML - RDB to RDF Mapping Language)
+
+```python
+# Example: CSV to Knowledge Graph
+import pandas as pd
+from rdflib import Graph, Namespace, Literal, URIRef
+from rdflib.namespace import RDF
+
+# Source: papers.csv
+# paper_id,title,year,author_id
+# p1,"Attention Is All You Need",2017,a1
+# p2,"BERT",2018,a2
+
+df = pd.read_csv("papers.csv")
+g = Graph()
+ns = Namespace("http://example.org/")
+
+for _, row in df.iterrows():
+    paper_uri = ns[row['paper_id']]
+
+    # Add triples
+    g.add((paper_uri, RDF.type, ns.ResearchPaper))
+    g.add((paper_uri, ns.hasTitle, Literal(row['title'])))
+    g.add((paper_uri, ns.publishedYear, Literal(row['year'])))
+    g.add((paper_uri, ns.hasAuthor, ns[row['author_id']]))
+
+# Result: Knowledge graph with papers, titles, years, authors
+```
+
+**Mapping Rules (R2RML)**:
+```turtle
+# R2RML mapping: SQL table → RDF
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+
+<#PaperMapping> a rr:TriplesMap ;
+    rr:logicalTable [ rr:tableName "papers" ] ;
+    rr:subjectMap [
+        rr:template "http://example.org/paper/{paper_id}" ;
+        rr:class :ResearchPaper
+    ] ;
+    rr:predicateObjectMap [
+        rr:predicate :hasTitle ;
+        rr:objectMap [ rr:column "title" ]
+    ] .
+```
+
+**2. Semi-Structured Sources (JSON, XML)**
+
+**Characteristics**:
+- Flexible schema (entities of same type may have different attributes)
+- Examples: JSON APIs, XML documents, HTML pages
+- **Moderate complexity** to convert
+
+**Method**: Use mapping rules adapted to the structure
+
+```python
+import json
+from rdflib import Graph, Namespace, Literal
+
+# Source: papers.json
+json_data = {
+    "paper1": {
+        "title": "Attention Is All You Need",
+        "year": 2017,
+        "authors": ["Vaswani", "Shazeer"],  # Variable length!
+        "venue": "NIPS"  # Optional field
+    },
+    "paper2": {
+        "title": "BERT",
+        "year": 2018,
+        "authors": ["Devlin"]  # Different number of authors
+        # No venue field!
+    }
+}
+
+g = Graph()
+ns = Namespace("http://example.org/")
+
+for paper_id, paper_data in json_data.items():
+    paper_uri = ns[paper_id]
+    g.add((paper_uri, ns.hasTitle, Literal(paper_data['title'])))
+    g.add((paper_uri, ns.publishedYear, Literal(paper_data['year'])))
+
+    # Handle variable-length authors
+    for author in paper_data.get('authors', []):
+        g.add((paper_uri, ns.hasAuthor, Literal(author)))
+
+    # Handle optional venue
+    if 'venue' in paper_data:
+        g.add((paper_uri, ns.publishedAt, Literal(paper_data['venue'])))
+```
+
+**3. Unstructured Sources (Text, Images, PDFs)**
+
+**Characteristics**:
+- No fixed schema at all
+- Examples: Natural language text, research papers (PDF), images
+- **Most complex** to convert - requires AI/NLP
+
+**Method**: Use **NLP techniques** to extract entities and relationships
+
+```python
+# Example: Extract entities and relationships from text
+from transformers import pipeline
+
+# NLP model for Named Entity Recognition
+ner = pipeline("ner", model="dbmdz/bert-large-cased-finetuned-conll03-english")
+
+text = """
+Attention Is All You Need was published in 2017 by Vaswani and colleagues at Google.
+The paper introduced the Transformer architecture for sequence-to-sequence tasks.
+"""
+
+# Extract entities
+entities = ner(text)
+# Result: [
+#   {"entity": "Attention Is All You Need", "type": "WORK"},
+#   {"entity": "2017", "type": "DATE"},
+#   {"entity": "Vaswani", "type": "PERSON"},
+#   {"entity": "Google", "type": "ORG"}
+# ]
+
+# Extract relationships (requires relation extraction model)
+# "Attention Is All You Need" -[published_in]-> "2017"
+# "Attention Is All You Need" -[authored_by]-> "Vaswani"
+# "Vaswani" -[works_at]-> "Google"
+
+# Convert to knowledge graph triples
+g = Graph()
+ns = Namespace("http://example.org/")
+
+g.add((ns.attention_paper, ns.publishedYear, Literal(2017)))
+g.add((ns.attention_paper, ns.hasAuthor, ns.vaswani))
+g.add((ns.vaswani, ns.worksAt, ns.google))
+```
+
+#### Knowledge Graph Construction Process
+
+Here's the end-to-end process for building production knowledge graphs:
+
+```mermaid
+graph LR
+    Step0[Step 0: Define Use Case] --> Step1[Step 1: Data Collection]
+    Step1 --> Step2[Step 2: Data Cleaning]
+    Step2 --> Step3[Step 3: Data Modeling]
+    Step3 --> Step4[Step 4: Knowledge Graph Usage]
+
+    Step0 --> UseCase["- Define scope<br/>- Business questions<br/>- Required metadata"]
+    Step1 --> Collect["- Connect systems<br/>- Extract data<br/>- CSV/JSON/XML/SQL"]
+    Step2 --> Clean["- Standardize format<br/>- Remove duplicates<br/>- Validate quality"]
+    Step3 --> Model["- Convert to RDF triples<br/>- Subject-Predicate-Object<br/>- Apply schema"]
+    Step4 --> Use["- Query with SPARQL/Cypher<br/>- Discover insights<br/>- Enable AI agents"]
+
+    style Step0 fill:#FFE6E6
+    style Step1 fill:#E6F3FF
+    style Step2 fill:#FFF9E6
+    style Step3 fill:#E6FFE6
+    style Step4 fill:#F0E6FF
+```
+
+**Step 0: Define Use Case and Scope**
+
+Before building, answer:
+- **What questions** do we need to answer? ("Which papers cite X?", "Who are experts in Y?")
+- **What metadata** do we need? (papers, authors, citations, concepts)
+- **What relationships** matter? (cites, authored_by, discusses)
+
+**Example for ResearcherAI**:
+```python
+use_case = {
+    "questions": [
+        "Find papers related to transformers",
+        "Who are the leading researchers in NLP?",
+        "What papers cite the Attention paper?"
+    ],
+    "metadata": ["papers", "authors", "citations", "concepts"],
+    "relationships": ["cites", "authored_by", "discusses", "collaborates_with"]
+}
+```
+
+**Step 1: Data Collection**
+
+Gather data from various sources across your ecosystem:
+
+```python
+# Example: Collect from multiple sources
+sources = {
+    "papers_db": "SELECT * FROM papers",  # SQL database
+    "arxiv_api": "https://api.arxiv.org/papers",  # REST API
+    "paper_pdfs": "/data/pdfs/*.pdf",  # Unstructured files
+    "citations_csv": "/data/citations.csv"  # CSV file
+}
+
+# Each source "speaks" a different language:
+# - SQL: Relational tables
+# - API: JSON
+# - PDFs: Unstructured text
+# - CSV: Tabular data
+```
+
+**Step 2: Data Cleaning and Standardization**
+
+Ensure data quality by:
+- **Standardizing**: Convert all dates to ISO format (YYYY-MM-DD)
+- **Deduplicating**: Merge duplicate author entries
+- **Validating**: Check data types, required fields
+- **Resolving**: Handle inconsistencies (same paper different IDs)
+
+```python
+import pandas as pd
+
+# Example: Clean author data
+authors_raw = pd.read_csv("authors.csv")
+
+# Standardize names
+authors_raw['name'] = authors_raw['name'].str.strip().str.title()
+
+# Remove duplicates (same email = same person)
+authors_clean = authors_raw.drop_duplicates(subset=['email'])
+
+# Validate required fields
+authors_clean = authors_clean.dropna(subset=['name', 'affiliation'])
+
+# Resolve inconsistencies (assign unique IDs)
+authors_clean['author_id'] = range(len(authors_clean))
+```
+
+**Step 3: Data Modeling (Convert to RDF Triples)**
+
+Transform cleaned data into standardized RDF triples:
+
+```python
+from rdflib import Graph, Namespace, Literal, URIRef
+from rdflib.namespace import RDF
+
+g = Graph()
+ns = Namespace("http://researcherai.org/")
+
+# For each paper in cleaned data
+for _, paper in papers_clean.iterrows():
+    paper_uri = ns[f"paper/{paper['id']}"]
+
+    # Subject-Predicate-Object triples
+    g.add((paper_uri, RDF.type, ns.ResearchPaper))
+    g.add((paper_uri, ns.hasTitle, Literal(paper['title'])))
+    g.add((paper_uri, ns.publishedYear, Literal(paper['year'])))
+
+    # Relationships to other entities
+    for author_id in paper['authors']:
+        author_uri = ns[f"author/{author_id}"]
+        g.add((paper_uri, ns.hasAuthor, author_uri))
+```
+
+**Step 4: Usage and Insights**
+
+Now query the knowledge graph to deliver value:
+
+```sparql
+# Find papers by author
+SELECT ?paper ?title WHERE {
+    ?author :hasName "Ashish Vaswani" .
+    ?paper :hasAuthor ?author .
+    ?paper :hasTitle ?title .
+}
+
+# Find citation paths
+SELECT ?citing ?cited WHERE {
+    ?citing :cites+ ?cited .  # Transitive: 1+ hops
+}
+```
+
+#### Comparison of Construction Methods
+
+| Source Type | Complexity | Tools | Best For |
+|-------------|-----------|-------|----------|
+| **Structured** | ⭐ Low | R2RML, pandas | Databases, CSV, Excel |
+| **Semi-Structured** | ⭐⭐ Medium | JSON/XML parsers | APIs, config files |
+| **Unstructured** | ⭐⭐⭐ High | NLP, LLMs, OCR | PDFs, text, images |
+
+**ResearcherAI's Approach**:
+1. **Structured**: arXiv metadata (JSON API) → Easy conversion
+2. **Semi-Structured**: Paper metadata from multiple APIs → JSON parsing
+3. **Unstructured**: Paper PDFs → NLP for concept extraction
+
+:::tip Construction Best Practices
+- **Start with structured sources** - easiest to convert and validate
+- **Clean data thoroughly** - garbage in, garbage out
+- **Define schema first** - know what entities and relationships you need
+- **Validate incrementally** - check quality at each step
+- **Use existing ontologies** - don't reinvent the wheel (e.g., Schema.org)
+:::
+
 ### Production Decision: Neo4j vs Apache Jena Fuseki
 
 **Critical Understanding**: Neo4j and Apache Jena Fuseki are **NOT interchangeable alternatives**. They serve fundamentally different use cases!
@@ -2948,6 +3339,313 @@ RETURN path
 # Understand how transformer attention differs from earlier attention
 # By traversing citation graph from Bahdanau (2014) to Vaswani (2017)
 ```
+
+### Enterprise Use Case: Knowledge Graphs for AI Agent API Discovery
+
+Now let's see a practical enterprise application showing **why knowledge graphs matter** for AI agents in complex business environments.
+
+#### The Problem: Complex Enterprise API Landscapes
+
+Imagine you have an **AI agent** in an enterprise environment, and a user makes this request:
+
+> "Create a purchase order for 5 pencils in purchasing group 002 and purchasing organization 3000"
+
+**Seems simple, right?** But here's the reality:
+
+- Enterprise systems have **thousands** of different APIs
+- Which API creates purchase orders? (Could be 10+ candidates)
+- What parameters are required? (Purchasing group? Organization? Material codes?)
+- What's the correct sequence? (Auth → Validate → Create → Submit?)
+
+**Without context**, the AI agent faces:
+1. **Trial and error** API discovery (slow, expensive)
+2. **Missing domain knowledge** (which API for which business process?)
+3. **No structure** (can't understand API dependencies)
+4. **No explainability** (can't trace what it did or why)
+
+**Solution**: Build a **knowledge graph of your enterprise APIs** enriched with business process information!
+
+#### Knowledge Graph for Enterprise APIs
+
+**Structure**:
+```turtle
+# Nodes (entities)
+:PurchaseOrderAPI rdf:type :API .
+:PurchasingProcess rdf:type :BusinessProcess .
+:PurchasingGroup rdf:type :Parameter .
+
+# Relationships
+:PurchaseOrderAPI :belongsTo :PurchasingProcess .
+:PurchaseOrderAPI :requires :PurchasingGroup .
+:PurchaseOrderAPI :requires :PurchasingOrganization .
+:PurchaseOrderAPI :requires :MaterialNumber .
+
+# Metadata
+:PurchaseOrderAPI :endpoint "/api/v1/purchase-orders" .
+:PurchaseOrderAPI :method "POST" .
+:PurchasingGroup :allowedValues ["001", "002", "003"] .
+```
+
+**Visualization**:
+```mermaid
+graph TD
+    User[User Request:<br/>Create PO for pencils] --> Agent[AI Agent]
+
+    Agent --> KG[(Knowledge Graph:<br/>Enterprise APIs)]
+
+    KG --> Process[Business Process:<br/>Purchasing]
+    Process --> API1[Purchase Order API]
+    Process --> API2[Material Lookup API]
+
+    API1 --> Params1[Required Params:<br/>- Purchasing Group<br/>- Purch Organization<br/>- Material Number]
+
+    API2 --> Params2[Required Params:<br/>- Material Name]
+
+    Params2 --> Exec1[Step 1: Lookup Material<br/>pencils → M12345]
+    Params1 --> Exec2[Step 2: Create PO<br/>with M12345, 002, 3000]
+
+    style KG fill:#90EE90
+    style Process fill:#FFB6C1
+    style Exec1 fill:#DDA0DD
+    style Exec2 fill:#DDA0DD
+```
+
+#### How Knowledge Graphs Solve Enterprise AI Agent Challenges
+
+**Challenge 1: Slow API Discovery**
+
+**Without Knowledge Graph**:
+```python
+# Agent tries APIs randomly
+attempts = [
+    "Try: /api/orders/create → Wrong (this is for sales orders)",
+    "Try: /api/procurement/new → Wrong (deprecated API)",
+    "Try: /api/purchase-orders/post → Wrong (requires different params)",
+    "Try: /api/v2/purchasing/create-po → Success! (after 4 attempts)"
+]
+# Result: 4 failed attempts, wasted tokens, slow response
+```
+
+**With Knowledge Graph**:
+```python
+# Agent queries knowledge graph
+query = """
+SELECT ?api WHERE {
+    ?process :name "Purchasing" .
+    ?api :belongsTo ?process .
+    ?api :action "CreatePurchaseOrder" .
+}
+"""
+result = ["POST /api/v2/purchasing/create-po"]  # Direct match!
+# Result: 1 attempt, instant, efficient
+```
+
+**Benefit**: **90% reduction in API discovery time**
+
+**Challenge 2: Missing Domain Context**
+
+**Without Knowledge Graph**:
+```python
+# Agent doesn't know business logic
+user_request = "Create PO for pencils in group 002"
+
+# Agent tries:
+api_call = {
+    "endpoint": "/api/purchase-orders",
+    "params": {
+        "item": "pencils",  # ❌ Wrong: needs material number
+        "group": "002"  # ✅ Correct
+    }
+}
+# Result: API error "Missing material_number parameter"
+```
+
+**With Knowledge Graph**:
+```python
+# Agent queries graph for required workflow
+workflow = knowledge_graph.query("""
+SELECT ?step ?api ?required_param WHERE {
+    ?process :name "CreatePurchaseOrder" .
+    ?process :hasStep ?step .
+    ?step :callsAPI ?api .
+    ?api :requiresParameter ?required_param .
+}
+ORDER BY ?step
+""")
+
+# Result:
+# Step 1: Material Lookup API (param: material_name → returns: material_number)
+# Step 2: Purchase Order API (params: material_number, purchasing_group, purchasing_org)
+
+# Agent executes correctly:
+material_number = call_api("MaterialLookup", {"name": "pencils"})  # M12345
+po = call_api("PurchaseOrder", {
+    "material": material_number,
+    "group": "002",
+    "org": "3000"
+})
+# Result: ✅ Success in correct sequence
+```
+
+**Benefit**: **Automatic workflow understanding** from graph structure
+
+**Challenge 3: Complex API Dependencies**
+
+**Without Knowledge Graph**:
+```python
+# Agent doesn't know allowed values
+params = {
+    "purchasing_group": "999"  # ❌ Invalid value
+}
+# Result: API rejects with cryptic error
+```
+
+**With Knowledge Graph**:
+```python
+# Graph contains allowed values
+allowed = knowledge_graph.query("""
+SELECT ?value WHERE {
+    :PurchasingGroup :allowedValues ?value .
+}
+""")
+# Result: ["001", "002", "003"]
+
+# Agent validates BEFORE calling API
+if "999" not in allowed:
+    # Ask user or pick valid value
+    pass
+```
+
+**Benefit**: **Validation before execution**, reducing errors
+
+**Challenge 4: No Explainability**
+
+**Without Knowledge Graph**:
+```
+User: "Why did you use that API?"
+Agent: "Based on my training, I determined..." (vague)
+```
+
+**With Knowledge Graph**:
+```python
+# Agent can trace reasoning through graph
+explanation = {
+    "question": "Create purchase order for pencils",
+    "reasoning_path": [
+        "1. Identified business process: Purchasing",
+        "2. Found process step: MaterialLookup (required for material_number)",
+        "3. Called MaterialLookup API with 'pencils' → returned M12345",
+        "4. Found process step: CreatePurchaseOrder",
+        "5. Validated parameters against schema:",
+        "   - material_number: M12345 (from step 3)",
+        "   - purchasing_group: 002 (from user, validated against allowed values)",
+        "   - purchasing_org: 3000 (from user)",
+        "6. Called PurchaseOrder API with validated params",
+        "7. Result: PO-2024-001 created successfully"
+    ],
+    "source_apis": ["/api/materials/lookup", "/api/purchase-orders/create"],
+    "graph_nodes_traversed": ["PurchasingProcess", "MaterialLookupAPI", "PurchaseOrderAPI"]
+}
+```
+
+**Benefit**: **Complete transparency and auditability**
+
+#### Implementation Example
+
+```python
+class EnterpriseAPIAgent:
+    """AI Agent with Knowledge Graph for API discovery"""
+
+    def __init__(self, kg: Neo4jKnowledgeGraph, llm: LLM):
+        self.kg = kg
+        self.llm = llm
+
+    def execute_request(self, user_request: str):
+        """Execute user request using knowledge graph"""
+
+        # Step 1: Understand intent
+        intent = self.llm.extract_intent(user_request)
+        # {"action": "CreatePurchaseOrder", "params": {"item": "pencils", "group": "002"}}
+
+        # Step 2: Query knowledge graph for workflow
+        workflow = self.kg.query_cypher(f"""
+        MATCH (process:BusinessProcess {{name: 'Purchasing'}})
+              -[:HAS_STEP]->(step:ProcessStep)
+              -[:CALLS_API]->(api:API)
+        WHERE step.action = '{intent["action"]}'
+        RETURN step.order as order, api.endpoint as endpoint,
+               api.required_params as params
+        ORDER BY order
+        """)
+
+        # Step 3: Execute workflow steps
+        context = {}
+        for step in workflow:
+            # Validate and enrich parameters
+            params = self._prepare_params(step["params"], intent["params"], context)
+
+            # Call API
+            response = self._call_api(step["endpoint"], params)
+
+            # Store result for next step
+            context[step["order"]] = response
+
+        return context
+
+    def _prepare_params(self, required, user_provided, context):
+        """Prepare API parameters using knowledge graph validation"""
+
+        params = {}
+        for param_name in required:
+            # Check if user provided
+            if param_name in user_provided:
+                # Validate against knowledge graph
+                allowed = self.kg.get_allowed_values(param_name)
+                if allowed and user_provided[param_name] not in allowed:
+                    raise ValueError(f"{param_name} must be one of {allowed}")
+                params[param_name] = user_provided[param_name]
+
+            # Check if available from previous steps
+            elif param_name in context:
+                params[param_name] = context[param_name]
+
+            else:
+                raise ValueError(f"Missing required parameter: {param_name}")
+
+        return params
+```
+
+#### Benefits Summary
+
+| Challenge | Without KG | With KG | Improvement |
+|-----------|-----------|---------|-------------|
+| **API Discovery** | Trial & error (10+ attempts) | Direct lookup (1 attempt) | 90% faster |
+| **Context Understanding** | Missing domain logic | Business process aware | Correct workflows |
+| **Parameter Validation** | Runtime errors | Pre-validated | Fewer failures |
+| **Explainability** | Black box | Full trace | Audit-ready |
+| **Maintenance** | Update LLM training | Update graph | Easy updates |
+
+#### When to Use Knowledge Graphs for AI Agents
+
+**Use KG-powered AI agents when**:
+- ✅ Complex API landscapes (100s-1000s of APIs)
+- ✅ Domain-specific business logic required
+- ✅ Auditability and explainability critical
+- ✅ APIs change frequently (easier to update graph than retrain)
+- ✅ Multi-step workflows common
+
+**Traditional RAG/LLM when**:
+- Simple, stable API sets (10-20 APIs)
+- No strict compliance requirements
+- Flexibility more important than precision
+
+:::tip Enterprise Knowledge Graphs
+Knowledge graphs transform AI agents from "smart guessers" to "informed executors" by providing:
+- **Structure**: API relationships and dependencies
+- **Context**: Business process integration
+- **Validation**: Allowed values and constraints
+- **Explainability**: Traceable reasoning paths
+:::
 
 ---
 
