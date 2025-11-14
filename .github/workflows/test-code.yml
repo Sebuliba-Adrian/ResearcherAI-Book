@@ -48,7 +48,7 @@ jobs:
 
       - name: Upload test report
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-report
           path: tests/test-results.xml
@@ -114,8 +114,8 @@ jobs:
           md_file = Path('docs/data-foundations.md')
           content = md_file.read_text()
 
-          # Extract Python code blocks
-          pattern = r'\`\`\`python\n(.*?)\`\`\`'
+          # Extract Python code blocks - use multiline regex to avoid matching ''' inside strings
+          pattern = r'\`\`\`python\n(.*?)\n\`\`\`'
           blocks = re.findall(pattern, content, re.DOTALL)
 
           errors = []

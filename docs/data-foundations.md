@@ -3875,6 +3875,7 @@ Follow-up (citing these):
 
 Related Concepts:
 - Self-attention, Multi-head attention, Positional encoding
+"""
 ```
 
 **2. Better Citation Paths**
